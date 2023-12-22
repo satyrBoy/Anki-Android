@@ -28,11 +28,8 @@ import androidx.core.content.edit
 import androidx.fragment.app.Fragment
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ichi2.anki.CardBrowser.CardCache
-import com.ichi2.anki.DeckSpinnerSelection.Companion.ALL_DECKS_ID
-import com.ichi2.anki.browser.CardBrowserColumn
 import com.ichi2.anki.browser.CardBrowserViewModel.Companion.DISPLAY_COLUMN_1_KEY
 import com.ichi2.anki.browser.CardBrowserViewModel.Companion.DISPLAY_COLUMN_2_KEY
-import com.ichi2.anki.introduction.hasCollectionStoragePermissions
 import com.ichi2.anki.model.CardsOrNotes.*
 import com.ichi2.anki.model.SortType
 import com.ichi2.libanki.CardId
@@ -46,10 +43,8 @@ import com.ichi2.testutils.Flaky
 import com.ichi2.testutils.IntentAssert
 import com.ichi2.testutils.OS
 import com.ichi2.testutils.getSharedPrefs
+import com.ichi2.testutils.withNoWritePermission
 import com.ichi2.ui.FixedTextView
-import io.mockk.every
-import io.mockk.mockkStatic
-import io.mockk.unmockkStatic
 import kotlinx.coroutines.runBlocking
 import org.hamcrest.MatcherAssert.assertThat
 import org.hamcrest.Matchers.*
@@ -363,13 +358,8 @@ class CardBrowserTest : RobolectricTest() {
 
     @Test
     fun startupFromCardBrowserActionItemShouldEndActivityIfNoPermissions() {
-        val inputIntent = Intent("android.intent.action.PROCESS_TEXT")
-
-        val mockedMethod = AnkiActivity::hasCollectionStoragePermissions
-        try {
-            mockkStatic(mockedMethod)
-
-            every { any<AnkiActivity>().hasCollectionStoragePermissions() } returns false
+        withNoWritePermission {
+            val inputIntent = Intent("android.intent.action.PROCESS_TEXT")
 
             val browserController =
                 Robolectric.buildActivity(CardBrowser::class.java, inputIntent).create()
@@ -391,8 +381,6 @@ class CardBrowserTest : RobolectricTest() {
                 shadowActivity.resultCode,
                 equalTo(Activity.RESULT_CANCELED)
             )
-        } finally {
-            unmockkStatic(mockedMethod)
         }
     }
 
@@ -464,14 +452,14 @@ class CardBrowserTest : RobolectricTest() {
 
     /** 7420  */
     @Test
-    fun addCardDeckIsNotSetIfAllDecksSelectedAfterLoad() = runTest {
+    fun addCardDeckIsNotSetIfAllDecksSelectedAfterLoad() {
         addDeck("NotDefault")
 
         val b = browserWithNoNewCards
 
         assertThat("All decks should not be selected", b.hasSelectedAllDecks(), equalTo(false))
 
-        b.viewModel.setDeckId(ALL_DECKS_ID)
+        b.selectAllDecks()
 
         assertThat("All decks should be selected", b.hasSelectedAllDecks(), equalTo(true))
 
@@ -482,7 +470,7 @@ class CardBrowserTest : RobolectricTest() {
 
     /** 7420  */
     @Test
-    fun addCardDeckISetIfDeckIsSelected() = runTest {
+    fun addCardDeckISetIfDeckIsSelected() {
         val targetDid = addDeck("NotDefault")
 
         val b = browserWithNoNewCards
@@ -493,7 +481,7 @@ class CardBrowserTest : RobolectricTest() {
             not(equalTo(targetDid))
         )
 
-        b.viewModel.setDeckId(targetDid)
+        b.selectDeckAndSave(targetDid)
 
         assertThat("The target deck should be selected", b.lastDeckId, equalTo(targetDid))
 
@@ -528,7 +516,7 @@ class CardBrowserTest : RobolectricTest() {
 
         assertThat(
             "Initial position of checked card",
-            card.getColumnHeaderText(CardBrowserColumn.DUE),
+            card.getColumnHeaderText(CardBrowser.Column.DUE),
             equalTo("1")
         )
 
@@ -538,7 +526,7 @@ class CardBrowserTest : RobolectricTest() {
 
         assertThat(
             "Position of checked card after reposition",
-            card.getColumnHeaderText(CardBrowserColumn.DUE),
+            card.getColumnHeaderText(CardBrowser.Column.DUE),
             equalTo("2")
         )
     }
@@ -561,7 +549,7 @@ class CardBrowserTest : RobolectricTest() {
 
         assertThat(
             "Initial due of checked card",
-            card.getColumnHeaderText(CardBrowserColumn.DUE),
+            card.getColumnHeaderText(CardBrowser.Column.DUE),
             equalTo("8/12/20")
         )
 
@@ -571,7 +559,7 @@ class CardBrowserTest : RobolectricTest() {
 
         assertThat(
             "Position of checked card after reset",
-            card.getColumnHeaderText(CardBrowserColumn.DUE),
+            card.getColumnHeaderText(CardBrowser.Column.DUE),
             equalTo("2")
         )
     }
@@ -588,7 +576,7 @@ class CardBrowserTest : RobolectricTest() {
 
         assertThat(
             "Initial position of checked card",
-            card.getColumnHeaderText(CardBrowserColumn.DUE),
+            card.getColumnHeaderText(CardBrowser.Column.DUE),
             equalTo("1")
         )
 
@@ -610,7 +598,7 @@ class CardBrowserTest : RobolectricTest() {
 
         assertThat(
             "Initial position of checked card",
-            card.getColumnHeaderText(CardBrowserColumn.DUE),
+            card.getColumnHeaderText(CardBrowser.Column.DUE),
             equalTo("1")
         )
 
@@ -618,7 +606,7 @@ class CardBrowserTest : RobolectricTest() {
 
         assertThat(
             "Position of checked card after reposition",
-            card.getColumnHeaderText(CardBrowserColumn.DUE),
+            card.getColumnHeaderText(CardBrowser.Column.DUE),
             equalTo("2")
         )
 
@@ -626,7 +614,7 @@ class CardBrowserTest : RobolectricTest() {
 
         assertThat(
             "Position of checked card after undo should be reset",
-            card.getColumnHeaderText(CardBrowserColumn.DUE),
+            card.getColumnHeaderText(CardBrowser.Column.DUE),
             equalTo("1")
         )
     }
@@ -1066,6 +1054,3 @@ fun ListView.getViewByPosition(pos: Int): View {
         }
     }
 }
-
-val CardBrowser.lastDeckId
-    get() = viewModel.lastDeckId

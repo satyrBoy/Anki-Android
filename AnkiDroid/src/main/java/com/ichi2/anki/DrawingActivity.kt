@@ -93,7 +93,7 @@ class DrawingActivity : AnkiActivity() {
         } catch (e: FileNotFoundException) {
             Timber.w(e)
         } finally {
-            finish()
+            finishActivityWithFade(this)
         }
     }
 

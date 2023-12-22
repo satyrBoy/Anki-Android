@@ -75,7 +75,7 @@ class Whiteboard(activity: AnkiActivity, handleMultiTouch: Boolean, inverted: Bo
     private val mColorPalette: LinearLayout
     private val mHandleMultiTouch: Boolean = handleMultiTouch
     private var mOnPaintColorChangeListener: OnPaintColorChangeListener? = null
-    private val currentStrokeWidth: Int
+    val currentStrokeWidth: Int
         get() = mAnkiActivity.sharedPrefs().getInt("whiteBoardStrokeWidth", 6)
 
     override fun onDraw(canvas: Canvas) {

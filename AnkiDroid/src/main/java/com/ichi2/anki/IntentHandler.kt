@@ -121,7 +121,7 @@ class IntentHandler : Activity() {
         val reviewIntent = Intent(this, Reviewer::class.java)
         CollectionHelper.instance.getColUnsafe(this)!!.decks.select(deckId)
         startActivity(reviewIntent)
-        finish()
+        AnkiActivity.finishActivityWithFade(this)
     }
 
     private fun handleSyncIntent(reloadIntent: Intent, action: String?) {
@@ -130,7 +130,7 @@ class IntentHandler : Activity() {
         reloadIntent.action = action
         reloadIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
         startActivity(reloadIntent)
-        finish()
+        AnkiActivity.finishActivityWithFade(this)
     }
 
     private fun handleFileImport(intent: Intent, reloadIntent: Intent, action: String?) {
@@ -173,7 +173,7 @@ class IntentHandler : Activity() {
             reloadIntent.action = action
             reloadIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             startActivity(reloadIntent)
-            finish()
+            AnkiActivity.finishActivityWithFade(this)
         } else {
             Timber.i("File import failed")
             // Don't import the file if it didn't load properly or doesn't have apkg extension

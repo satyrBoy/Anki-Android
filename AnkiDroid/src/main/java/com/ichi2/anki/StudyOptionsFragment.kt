@@ -33,6 +33,8 @@ import androidx.appcompat.widget.Toolbar
 import androidx.core.text.HtmlCompat
 import androidx.core.view.MenuItemCompat
 import androidx.fragment.app.Fragment
+import com.ichi2.anim.ActivityTransitionAnimation
+import com.ichi2.anim.ActivityTransitionAnimation.slide
 import com.ichi2.anki.CollectionManager.withCol
 import com.ichi2.anki.dialogs.customstudy.CustomStudyDialog
 import com.ichi2.anki.snackbar.showSnackbar
@@ -122,6 +124,7 @@ class StudyOptionsFragment : Fragment(), Toolbar.OnMenuItemClickListener {
         i.putExtra("defaultConfig", defaultConfig)
         Timber.i("openFilteredDeckOptions()")
         onDeckOptionsActivityResult.launch(i)
+        slide(requireActivity(), ActivityTransitionAnimation.Direction.FADE)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -164,6 +167,7 @@ class StudyOptionsFragment : Fragment(), Toolbar.OnMenuItemClickListener {
         if (!mFragmented && a != null) {
             a.setResult(result)
             a.finish()
+            slide(a, ActivityTransitionAnimation.Direction.END)
         } else if (a == null) {
             // getActivity() can return null if reference to fragment lingers after parent activity has been closed,
             // which is particularly relevant when using AsyncTasks.
@@ -185,6 +189,11 @@ class StudyOptionsFragment : Fragment(), Toolbar.OnMenuItemClickListener {
             startActivity(reviewer)
             requireActivity().finish()
         }
+        animateLeft()
+    }
+
+    private fun animateLeft() {
+        slide(requireActivity(), ActivityTransitionAnimation.Direction.START)
     }
 
     private fun initAllContentViews(studyOptionsView: View) {
@@ -234,6 +243,7 @@ class StudyOptionsFragment : Fragment(), Toolbar.OnMenuItemClickListener {
                     val i = com.ichi2.anki.pages.DeckOptions.getIntent(requireContext(), col!!.decks.current().id)
                     Timber.i("Opening deck options for activity result")
                     onDeckOptionsActivityResult.launch(i)
+                    slide(requireActivity(), ActivityTransitionAnimation.Direction.FADE)
                 }
                 return true
             }
@@ -355,7 +365,7 @@ class StudyOptionsFragment : Fragment(), Toolbar.OnMenuItemClickListener {
                 val icon = AppCompatResources.getDrawable(requireContext(), R.drawable.ic_arrow_back_white)
                 icon!!.isAutoMirrored = true
                 mToolbar!!.navigationIcon = icon
-                mToolbar!!.setNavigationOnClickListener { (activity as AnkiActivity).finish() }
+                mToolbar!!.setNavigationOnClickListener { (activity as AnkiActivity).finishWithAnimation(ActivityTransitionAnimation.Direction.END) }
             }
         } catch (e: IllegalStateException) {
             if (!CollectionHelper.instance.colIsOpenUnsafe()) {

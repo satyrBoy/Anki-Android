@@ -39,6 +39,7 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import com.ichi2.anim.ActivityTransitionAnimation.Direction.END
 import com.ichi2.anki.CollectionManager.withCol
 import com.ichi2.anki.dialogs.ConfirmationDialog
 import com.ichi2.anki.dialogs.DeckSelectionDialog
@@ -201,7 +202,7 @@ open class CardTemplateEditor : AnkiActivity(), DeckSelectionListener {
         // Clear the edited model from any cache files, and clear it from this objects memory to discard changes
         CardTemplateNotetype.clearTempModelFiles()
         tempModel = null
-        finish()
+        finishWithAnimation(END)
     }
 
     /** When a deck is selected via Deck Override  */
@@ -555,7 +556,7 @@ open class CardTemplateEditor : AnkiActivity(), DeckSelectionListener {
                                     }
                                 } else {
                                     Timber.d("CardTemplateEditor:: model has not changed, exiting")
-                                    mTemplateEditor.finish()
+                                    mTemplateEditor.finishWithAnimation(END)
                                 }
 
                                 return true
@@ -582,7 +583,7 @@ open class CardTemplateEditor : AnkiActivity(), DeckSelectionListener {
                 button.isEnabled = true
             }
             mTemplateEditor.tempModel = null
-            mTemplateEditor.finish()
+            mTemplateEditor.finishWithAnimation(END)
         }
 
         fun performPreview() {

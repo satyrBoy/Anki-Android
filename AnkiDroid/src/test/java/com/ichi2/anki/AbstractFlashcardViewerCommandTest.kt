@@ -18,6 +18,7 @@ package com.ichi2.anki
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ichi2.anki.cardviewer.ViewerCommand
 import com.ichi2.anki.cardviewer.ViewerCommand.*
+import com.ichi2.anki.reviewer.ReviewerUi.ControlBlock
 import com.ichi2.libanki.Card
 import org.hamcrest.MatcherAssert.assertThat
 import org.hamcrest.Matchers.equalTo
@@ -190,6 +191,15 @@ class AbstractFlashcardViewerCommandTest : RobolectricTest() {
         override fun performReload() {
             // intentionally blank
         }
+
+        override var controlBlocked: ControlBlock
+            get() = ControlBlock.UNBLOCKED
+            set(controlBlocked) {
+                super.controlBlocked = controlBlocked
+            }
+
+        override val isControlBlocked: Boolean
+            get() = controlBlocked !== ControlBlock.UNBLOCKED
 
         override fun onFlag(card: Card?, flag: Flag) {
             lastFlag = flag.code

@@ -38,10 +38,7 @@ class CardBrowserViewModelTest : JvmTest() {
     }
 
     private fun runViewModelTest(testBody: suspend CardBrowserViewModel.() -> Unit) = runTest {
-        val viewModel = CardBrowserViewModel(
-            lastDeckIdRepository = SharedPreferencesLastDeckIdRepository(),
-            preferences = AnkiDroidApp.sharedPreferencesProvider
-        )
+        val viewModel = CardBrowserViewModel(AnkiDroidApp.sharedPreferencesProvider)
         testBody(viewModel)
     }
 }

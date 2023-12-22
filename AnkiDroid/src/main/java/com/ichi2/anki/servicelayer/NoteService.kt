@@ -231,8 +231,6 @@ object NoteService {
     }
 }
 
-const val MARKED_TAG = "marked"
-
 fun Card.totalLapsesOfNote() = NoteService.totalLapses(note())
 
 fun Card.totalReviewsForNote() = NoteService.totalReviews(note())

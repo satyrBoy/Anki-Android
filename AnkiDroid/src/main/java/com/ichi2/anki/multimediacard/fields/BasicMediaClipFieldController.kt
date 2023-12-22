@@ -27,6 +27,7 @@ import android.widget.LinearLayout
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import com.ichi2.anim.ActivityTransitionAnimation
 import com.ichi2.anki.AnkiDroidApp
 import com.ichi2.anki.CrashReportService
 import com.ichi2.anki.R
@@ -95,7 +96,11 @@ class BasicMediaClipFieldController : FieldControllerBase(), IFieldController {
         // Only get openable files, to avoid virtual files issues with Android 7+
         i.addCategory(Intent.CATEGORY_OPENABLE)
         val chooserPrompt = mActivity.resources.getString(prompt)
-        selectMediaLauncher.launch(Intent.createChooser(i, chooserPrompt))
+        mActivity.launchActivityForResultWithAnimation(
+            Intent.createChooser(i, chooserPrompt),
+            selectMediaLauncher,
+            ActivityTransitionAnimation.Direction.NONE
+        )
     }
 
     override fun setEditingActivity(activity: MultimediaEditFieldActivity) {

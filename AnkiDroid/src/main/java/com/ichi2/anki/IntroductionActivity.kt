@@ -22,7 +22,6 @@ import android.os.Bundle
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.edit
-import com.ichi2.anki.introduction.SetupCollectionFragment
 import com.ichi2.anki.introduction.SetupCollectionFragment.*
 import com.ichi2.anki.introduction.SetupCollectionFragment.Companion.handleCollectionSetupOption
 import com.ichi2.anki.preferences.sharedPrefs
@@ -31,19 +30,13 @@ import timber.log.Timber
 
 /**
  * App introduction for new users.
- *
- * Links to [LoginActivity] ("Sync from AnkiWeb") or [DeckPicker] ("Get Started")
- *
- * @see SetupCollectionFragment
+ * TODO: Background of introduction_layout does not display on API 25 emulator: https://github.com/ankidroid/Anki-Android/pull/12033#issuecomment-1228429130
  */
-// TODO: Background of introduction_layout does not display on API 25 emulator: https://github.com/ankidroid/Anki-Android/pull/12033#issuecomment-1228429130
 @NeedsTest("Ensure that we can get here on first run without an exception dialog shown")
 class IntroductionActivity : AnkiActivity() {
 
-    @NeedsTest("ensure this is called when the activity ends")
     private val onLoginResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
         if (result.resultCode == RESULT_OK) {
-            Timber.i("login successful, opening deck picker to sync")
             startDeckPicker(RESULT_SYNC_PROFILE)
         } else {
             Timber.i("login was not successful")

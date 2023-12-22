@@ -20,6 +20,8 @@ package com.ichi2.anki
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.preference.*
+import com.ichi2.anim.ActivityTransitionAnimation
+import com.ichi2.anim.ActivityTransitionAnimation.slide
 import com.ichi2.anki.analytics.UsageAnalytics
 import com.ichi2.annotations.NeedsTest
 import com.ichi2.libanki.Collection
@@ -262,6 +264,7 @@ class FilteredDeckOptions :
             }
         }
         finish()
+        slide(this, ActivityTransitionAnimation.Direction.FADE)
     }
 
     @Suppress("deprecation") // conversion to fragments tracked in github as #5019

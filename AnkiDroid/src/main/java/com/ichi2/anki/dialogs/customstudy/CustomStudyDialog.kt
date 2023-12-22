@@ -66,7 +66,7 @@ class CustomStudyDialog(private val collection: Collection, private val customSt
         fun onExtendStudyLimits()
         fun showDialogFragment(newFragment: DialogFragment)
         fun dismissAllDialogFragments()
-        fun startActivity(intent: Intent)
+        fun startActivityWithoutAnimation(intent: Intent)
     }
 
     fun withArguments(contextMenuAttribute: ContextMenuAttribute<*>, did: DeckId, jumpToReviewer: Boolean = false): CustomStudyDialog {
@@ -490,7 +490,7 @@ class CustomStudyDialog(private val collection: Collection, private val customSt
 
     private fun onLimitsExtended(jumpToReviewer: Boolean) {
         if (jumpToReviewer) {
-            customStudyListener?.startActivity(Intent(requireContext(), Reviewer::class.java))
+            customStudyListener?.startActivityWithoutAnimation(Intent(requireContext(), Reviewer::class.java))
         } else {
             customStudyListener?.onExtendStudyLimits()
         }

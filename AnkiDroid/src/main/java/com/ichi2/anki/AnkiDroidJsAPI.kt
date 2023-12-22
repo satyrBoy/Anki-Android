@@ -24,6 +24,7 @@ import android.content.Intent
 import android.net.Uri
 import com.github.zafarkhaja.semver.Version
 import com.google.android.material.snackbar.Snackbar
+import com.ichi2.anim.ActivityTransitionAnimation
 import com.ichi2.anki.AnkiDroidJsAPIConstants.ankiJsErrorCodeBuryCard
 import com.ichi2.anki.AnkiDroidJsAPIConstants.ankiJsErrorCodeBuryNote
 import com.ichi2.anki.AnkiDroidJsAPIConstants.ankiJsErrorCodeError
@@ -265,7 +266,7 @@ open class AnkiDroidJsAPI(private val activity: AbstractFlashcardViewer) {
                     putExtra("currentCard", currentCard.id)
                     putExtra("search_query", apiParams)
                 }
-                activity.startActivity(intent)
+                activity.startActivityWithAnimation(intent, ActivityTransitionAnimation.Direction.START)
                 convertToByteArray(apiContract, true)
             }
             "searchCardWithCallback" -> ankiSearchCardWithCallback(apiContract)

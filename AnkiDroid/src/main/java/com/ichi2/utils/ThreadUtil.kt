@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2023 David Allison <davidallisongithub@gmail.com>
+ *  Copyright (c) 2020 David Allison <davidallisongithub@gmail.com>
  *
  *  This program is free software; you can redistribute it and/or modify it under
  *  the terms of the GNU General Public License as published by the Free Software
@@ -14,24 +14,16 @@
  *  this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package com.ichi2.anki.browser
+package com.ichi2.utils
 
-import com.ichi2.libanki.Config
 import timber.log.Timber
 
-/**
- * Whether searches should be reversed
- */
-data class ReverseDirection(val orderAsc: Boolean) {
-    // TODO: This likely needs to handle 'CardsOrNotes'
-    fun updateConfig(config: Config) {
-        Timber.v("update config to %s", this)
-        config.set("sortBackwards", orderAsc)
-        config.set("browserNoteSortBackwards", orderAsc)
-    }
-
-    companion object {
-        fun fromConfig(config: Config): ReverseDirection =
-            ReverseDirection(orderAsc = config.get("sortBackwards") ?: false)
+object ThreadUtil {
+    fun sleep(timeout: Int) {
+        try {
+            Thread.sleep(timeout.toLong())
+        } catch (e: InterruptedException) {
+            Timber.w(e)
+        }
     }
 }

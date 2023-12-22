@@ -45,6 +45,7 @@ import androidx.core.view.MenuItemCompat
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.snackbar.Snackbar
+import com.ichi2.anim.ActivityTransitionAnimation
 import com.ichi2.anim.ActivityTransitionAnimation.getInverseTransition
 import com.ichi2.anki.CollectionManager.withCol
 import com.ichi2.anki.Whiteboard.Companion.createInstance
@@ -150,7 +151,7 @@ open class Reviewer :
     // Preferences from the collection
     private var mShowRemainingCardCount = false
     private var stopTimerOnAnswer = false
-    private val mActionButtons = ActionButtons()
+    private val mActionButtons = ActionButtons(this)
     private lateinit var mToolbar: Toolbar
 
     @VisibleForTesting
@@ -169,7 +170,7 @@ open class Reviewer :
         super.onCreate(savedInstanceState)
         if (handledLaunchFromWebBrowser(intent, this)) {
             this.setResult(RESULT_CANCELED)
-            finish()
+            finishWithAnimation(ActivityTransitionAnimation.Direction.END)
             return
         }
         mColorPalette = findViewById(R.id.whiteboard_editor)
@@ -548,6 +549,13 @@ open class Reviewer :
         super.unblockControls()
     }
 
+    public override fun blockControls(quick: Boolean) {
+        if (prefWhiteboard && whiteboard != null) {
+            whiteboard!!.isEnabled = false
+        }
+        super.blockControls(quick)
+    }
+
     override fun closeReviewer(result: Int) {
         // Stop the mic recording if still pending
         audioView?.notifyStopRecord()
@@ -664,7 +672,7 @@ open class Reviewer :
         val animation = getAnimationTransitionFromGesture(fromGesture)
         intent.putExtra(NoteEditor.EXTRA_CALLER, NoteEditor.CALLER_REVIEWER_ADD)
         intent.putExtra(FINISH_ANIMATION_EXTRA, getInverseTransition(animation) as Parcelable)
-        addNoteLauncher.launch(intent)
+        launchActivityForResultWithAnimation(intent, addNoteLauncher, animation)
     }
 
     @NeedsTest("Starting animation from swipe is inverse to the finishing one")
@@ -687,7 +695,7 @@ open class Reviewer :
         menuInflater.inflate(R.menu.reviewer, menu)
         displayIcons(menu)
         mActionButtons.setCustomButtonsStatus(menu)
-        var alpha = Themes.ALPHA_ICON_ENABLED_LIGHT
+        var alpha = if (super.controlBlocked !== ReviewerUi.ControlBlock.SLOW) Themes.ALPHA_ICON_ENABLED_LIGHT else Themes.ALPHA_ICON_DISABLED_LIGHT
         val markCardIcon = menu.findItem(R.id.action_mark_card)
         if (currentCard != null && isMarked(currentCard!!.note())) {
             markCardIcon.setTitle(R.string.menu_unmark_note).setIcon(R.drawable.ic_star_white)
@@ -724,7 +732,7 @@ open class Reviewer :
             undoIconId = R.drawable.ic_undo_white
             undoEnabled = colIsOpenUnsafe() && getColUnsafe.undoAvailable()
         }
-        val alphaUndo = Themes.ALPHA_ICON_ENABLED_LIGHT
+        val alphaUndo = if (undoEnabled && super.controlBlocked !== ReviewerUi.ControlBlock.SLOW) Themes.ALPHA_ICON_ENABLED_LIGHT else Themes.ALPHA_ICON_DISABLED_LIGHT
         val undoIcon = menu.findItem(R.id.action_undo)
         undoIcon.setIcon(undoIconId)
         undoIcon.setEnabled(undoEnabled).iconAlpha = alphaUndo
@@ -838,7 +846,7 @@ open class Reviewer :
             buryIcon.setIcon(R.drawable.ic_flip_to_back_white)
             buryIcon.setTitle(R.string.menu_bury_card)
         }
-        alpha = Themes.ALPHA_ICON_ENABLED_LIGHT
+        alpha = if (super.controlBlocked !== ReviewerUi.ControlBlock.SLOW) Themes.ALPHA_ICON_ENABLED_LIGHT else Themes.ALPHA_ICON_DISABLED_LIGHT
         buryIcon.iconAlpha = alpha
         suspendIcon.iconAlpha = alpha
         MenuItemCompat.setActionProvider(menu.findItem(R.id.action_schedule), ScheduleProvider(this))
@@ -1056,7 +1064,7 @@ open class Reviewer :
             message(text = timeboxMessage)
             positiveButton(R.string.dialog_continue) {}
             negativeButton(text = CollectionManager.TR.studyingFinish()) {
-                finish()
+                finishWithAnimation(ActivityTransitionAnimation.Direction.END)
             }
             cancelable(true)
             setOnCancelListener { }
@@ -1154,6 +1162,9 @@ open class Reviewer :
     }
 
     override fun executeCommand(which: ViewerCommand, fromGesture: Gesture?): Boolean {
+        if (isControlBlocked && which !== ViewerCommand.EXIT) {
+            return false
+        }
         when (which) {
             ViewerCommand.TOGGLE_FLAG_RED -> {
                 toggleFlag(Flag.RED)
@@ -1414,7 +1425,7 @@ open class Reviewer :
      */
     @KotlinCleanup("mCurrentCard handling")
     private fun suspendNoteAvailable(): Boolean {
-        return if (currentCard == null) {
+        return if (currentCard == null || isControlBlocked) {
             false
         } else {
             getColUnsafe.db.queryScalar(
@@ -1428,7 +1439,7 @@ open class Reviewer :
 
     @KotlinCleanup("mCurrentCard handling")
     private fun buryNoteAvailable(): Boolean {
-        return if (currentCard == null) {
+        return if (currentCard == null || isControlBlocked) {
             false
         } else {
             getColUnsafe.db.queryScalar(

@@ -17,6 +17,7 @@
 package com.ichi2.libanki
 
 import anki.collection.OpChangesAfterUndo
+import net.ankiweb.rsdroid.RustCleanup
 import anki.collection.UndoStatus as UndoStatusProto
 
 /**
@@ -48,6 +49,7 @@ data class UndoStatus(
  * Will throw if no undo operation is possible (due to legacy code
  * directly mutating the database).
  */
+@RustCleanup("Once fully migrated, and v2 scheduler dropped, rename to undo()")
 fun Collection.undo(): OpChangesAfterUndo {
     return backend.undo()
 }

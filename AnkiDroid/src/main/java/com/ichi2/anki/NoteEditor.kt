@@ -104,7 +104,6 @@ import org.json.JSONObject
 import timber.log.Timber
 import java.util.*
 import java.util.function.Consumer
-import kotlin.collections.ArrayList
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -150,7 +149,7 @@ class NoteEditor : AnkiActivity(), DeckSelectionListener, SubtitleListener, Tags
 
     /* Null if adding a new card. Presently NonNull if editing an existing note - but this is subject to change */
     private var mCurrentEditedCard: Card? = null
-    private var mSelectedTags: MutableList<String>? = null
+    private var mSelectedTags: ArrayList<String>? = null
 
     @get:VisibleForTesting
     var deckId: DeckId = 0
@@ -419,7 +418,7 @@ class NoteEditor : AnkiActivity(), DeckSelectionListener, SubtitleListener, Tags
         if (mSelectedTags == null) {
             mSelectedTags = ArrayList(0)
         }
-        savedInstanceState.putStringArrayList("tags", mSelectedTags?.let { ArrayList(it) })
+        savedInstanceState.putStringArrayList("tags", mSelectedTags)
     }
 
     private val fieldsAsBundleForPreview: Bundle
@@ -465,12 +464,6 @@ class NoteEditor : AnkiActivity(), DeckSelectionListener, SubtitleListener, Tags
                 }
                 mEditorNote = mCurrentEditedCard!!.note()
                 addNote = false
-            }
-            CALLER_PREVIEWER_EDIT -> {
-                val id = intent.extras?.getLong(EXTRA_EDIT_FROM_CARD_ID)
-                    ?: throw IllegalArgumentException("null EXTRA_EDIT_FROM_CARD_ID")
-                mCurrentEditedCard = col.getCard(id)
-                mEditorNote = mCurrentEditedCard!!.note()
             }
             CALLER_STUDYOPTIONS, CALLER_DECKPICKER, CALLER_REVIEWER_ADD, CALLER_CARDBROWSER_ADD, CALLER_NOTEEDITOR ->
                 addNote =
@@ -936,40 +929,23 @@ class NoteEditor : AnkiActivity(), DeckSelectionListener, SubtitleListener, Tags
                 mCurrentEditedCard!!.did = deckId
                 modified = true
             }
-            if (currentNotetypeIsImageOcclusion()) {
-                closeNoteEditor()
-                return
-            }
-            // now load any changes to the fields from the form
-            for (f in mEditFields!!) {
-                modified = modified or updateField(f)
-            }
-            // added tag?
-            for (t in mSelectedTags!!) {
-                modified = modified || !mEditorNote!!.hasTag(t)
-            }
-            // removed tag?
-            modified = modified || mEditorNote!!.tags.size > mSelectedTags!!.size
-
-            if (!modified) {
-                closeNoteEditor()
-                return
-            }
-
-            mEditorNote!!.setTagsFromStr(tagsAsString(mSelectedTags!!))
-            changed = true
-
-            if (caller != CALLER_PREVIEWER_EDIT) {
-                closeNoteEditor()
-                return
-            }
-
-            withProgress {
-                undoableOp {
-                    updateNote(mCurrentEditedCard!!.note())
+            if (!currentNotetypeIsImageOcclusion()) {
+                // now load any changes to the fields from the form
+                for (f in mEditFields!!) {
+                    modified = modified or updateField(f)
                 }
-                closeNoteEditor()
+                // added tag?
+                for (t in mSelectedTags!!) {
+                    modified = modified || !mEditorNote!!.hasTag(t)
+                }
+                // removed tag?
+                modified = modified || mEditorNote!!.tags.size > mSelectedTags!!.size
+                if (modified) {
+                    mEditorNote!!.setTagsFromStr(tagsAsString(mSelectedTags!!))
+                    changed = true
+                }
             }
+            closeNoteEditor()
         }
     }
 
@@ -1138,7 +1114,7 @@ class NoteEditor : AnkiActivity(), DeckSelectionListener, SubtitleListener, Tags
         intent.putExtra(EXTRA_DID, deckId)
         // mutate event with additional properties
         intentEnricher.accept(intent)
-        requestAddLauncher.launch(intent)
+        launchActivityForResultWithAnimation(intent, requestAddLauncher, START)
     }
 
     // ----------------------------------------------------------------------------
@@ -1160,7 +1136,7 @@ class NoteEditor : AnkiActivity(), DeckSelectionListener, SubtitleListener, Tags
         addInstanceStateToBundle(noteEditorBundle)
         noteEditorBundle.putBundle("editFields", fieldsAsBundleForPreview)
         previewer.putExtra("noteEditorBundle", noteEditorBundle)
-        startActivity(previewer)
+        startActivityWithoutAnimation(previewer)
     }
 
     /**
@@ -1233,8 +1209,13 @@ class NoteEditor : AnkiActivity(), DeckSelectionListener, SubtitleListener, Tags
         )
         if (animation != null) {
             finishWithAnimation(animation)
+            return
+        }
+
+        if (caller == CALLER_NOTEEDITOR_INTENT_ADD) {
+            finishWithAnimation(NONE)
         } else {
-            finish()
+            finishWithAnimation(END)
         }
     }
 
@@ -1276,7 +1257,7 @@ class NoteEditor : AnkiActivity(), DeckSelectionListener, SubtitleListener, Tags
             intent.putExtra("ordId", mCurrentEditedCard!!.ord)
             Timber.d("showCardTemplateEditor() with ord %s", mCurrentEditedCard!!.ord)
         }
-        requestTemplateEditLauncher.launch(intent)
+        launchActivityForResultWithAnimation(intent, requestTemplateEditLauncher, START)
     }
 
     /** Appends a string at the selection point, or appends to the end if not in focus  */
@@ -1576,7 +1557,7 @@ class NoteEditor : AnkiActivity(), DeckSelectionListener, SubtitleListener, Tags
         val field = note!!.getField(index)!!
         val editCard = Intent(this@NoteEditor, MultimediaEditFieldActivity::class.java)
         editCard.putExtra(MultimediaEditFieldActivity.EXTRA_MULTIMEDIA_EDIT_FIELD_ACTIVITY, MultimediaEditFieldActivityExtra(index, field, note))
-        requestMultiMediaEditLauncher.launch(editCard)
+        launchActivityForResultWithAnimation(editCard, requestMultiMediaEditLauncher, NONE)
     }
 
     private fun initFieldEditText(editText: FieldEditText?, index: Int, enabled: Boolean) {
@@ -1637,7 +1618,7 @@ class NoteEditor : AnkiActivity(), DeckSelectionListener, SubtitleListener, Tags
     }
 
     private fun setEditFieldTexts(contents: String?) {
-        var fields: List<String>? = null
+        var fields: Array<String>? = null
         val len: Int
         if (contents == null) {
             len = 0
@@ -2287,7 +2268,6 @@ class NoteEditor : AnkiActivity(), DeckSelectionListener, SubtitleListener, Tags
         const val EXTRA_ID = "ID"
         const val EXTRA_DID = "DECK_ID"
         const val EXTRA_TEXT_FROM_SEARCH_VIEW = "SEARCH"
-        const val EXTRA_EDIT_FROM_CARD_ID = "editCid"
         private const val ACTION_CREATE_FLASHCARD = "org.openintents.action.CREATE_FLASHCARD"
         private const val ACTION_CREATE_FLASHCARD_SEND = "android.intent.action.SEND"
         const val NOTE_CHANGED_EXTRA_KEY = "noteChanged"
@@ -2302,7 +2282,6 @@ class NoteEditor : AnkiActivity(), DeckSelectionListener, SubtitleListener, Tags
         const val CALLER_CARDBROWSER_EDIT = 6
         const val CALLER_CARDBROWSER_ADD = 7
         const val CALLER_NOTEEDITOR = 8
-        const val CALLER_PREVIEWER_EDIT = 9
         const val CALLER_NOTEEDITOR_INTENT_ADD = 10
 
         const val RESULT_UPDATED_IO_NOTE = 11

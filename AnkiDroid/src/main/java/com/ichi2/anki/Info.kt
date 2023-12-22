@@ -30,6 +30,7 @@ import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.widget.ThemeUtils
 import com.google.android.material.button.MaterialButton
+import com.ichi2.anim.ActivityTransitionAnimation
 import com.ichi2.anki.preferences.sharedPrefs
 import com.ichi2.utils.AdaptionUtil
 import com.ichi2.utils.IntentUtil.canOpenIntent
@@ -181,7 +182,7 @@ class Info : AnkiActivity() {
     }
 
     private fun finishWithAnimation() {
-        finish()
+        finishWithAnimation(ActivityTransitionAnimation.Direction.START)
     }
 
     companion object {

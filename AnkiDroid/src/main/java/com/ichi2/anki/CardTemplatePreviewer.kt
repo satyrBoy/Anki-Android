@@ -18,6 +18,7 @@ package com.ichi2.anki
 
 import android.os.Bundle
 import android.view.View
+import com.ichi2.anim.ActivityTransitionAnimation
 import com.ichi2.anki.UIUtils.showThemedToast
 import com.ichi2.anki.cardviewer.PreviewLayout
 import com.ichi2.anki.cardviewer.PreviewLayout.Companion.createAndDisplay
@@ -116,11 +117,10 @@ open class CardTemplatePreviewer : AbstractFlashcardViewer() {
         Timber.d("CardTemplatePreviewer:: closeCardTemplatePreviewer()")
         setResult(RESULT_OK)
         CardTemplateNotetype.clearTempModelFiles()
-        finish()
+        finishWithAnimation(ActivityTransitionAnimation.Direction.END)
     }
 
-    @Deprecated("Deprecated in Java")
-    @Suppress("Deprecated in API34+dependencies for predictive back feature")
+    @Suppress("DEPRECATION", "Deprecated in API34+dependencies for predictive back feature")
     override fun onBackPressed() {
         Timber.i("CardTemplatePreviewer:: onBackPressed()")
         super.onBackPressed()
@@ -129,7 +129,7 @@ open class CardTemplatePreviewer : AbstractFlashcardViewer() {
 
     override fun performReload() {
         // This should not happen.
-        finish()
+        finishWithAnimation(ActivityTransitionAnimation.Direction.END)
     }
 
     override fun onNavigationPressed() {
@@ -392,11 +392,14 @@ open class CardTemplatePreviewer : AbstractFlashcardViewer() {
     }
 
     /** Override certain aspects of Card behavior so we may display unsaved data  */
-    inner class PreviewerCard(col: Collection, id: Long) : Card(col, id) {
-        private val mNote: Note? = null
+    inner class PreviewerCard : Card {
+        private val mNote: Note?
 
-        /* if we have an unsaved note saved, use it instead of a collection lookup */
-        override fun note(
+        constructor(col: Collection, id: Long) : super(col, id) {
+            mNote = null
+        }
+
+        /* if we have an unsaved note saved, use it instead of a collection lookup */ override fun note(
             reload: Boolean
         ): Note {
             return mNote ?: super.note(reload)

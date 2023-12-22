@@ -19,7 +19,6 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
-import android.os.Bundle
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -61,7 +60,7 @@ import java.util.function.Supplier
 class ActivityExportingDelegate(private val activity: AnkiActivity, private val collectionSupplier: Supplier<Collection>) : ExportDialogListener, ExportReadyDialogListener {
     val mDialogsFactory: ExportDialogsFactory
     private val mSaveFileLauncher: ActivityResultLauncher<Intent>
-    private lateinit var fileExportPath: String
+    private lateinit var mExportFileName: String
 
     fun showExportDialog(params: ExportDialogParams) {
         if (ScopedStorageService.mediaMigrationIsInProgress(activity)) {
@@ -183,7 +182,7 @@ class ActivityExportingDelegate(private val activity: AnkiActivity, private val 
             activity.getString(R.string.export_share_title)
         )
         if (shareFileIntent.resolveActivity(activity.packageManager) != null) {
-            activity.startActivity(shareFileIntent)
+            activity.startActivityWithoutAnimation(shareFileIntent)
             // TODO: find if there is a way to check whether the activity successfully shared the collection.
             saveSuccessfulCollectionExportIfRelevant()
         } else {
@@ -202,9 +201,8 @@ class ActivityExportingDelegate(private val activity: AnkiActivity, private val 
             return
         }
 
-        fileExportPath = exportPath
-
         // Send the user to the standard Android file picker via Intent
+        mExportFileName = exportPath
         val saveIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "application/apkg"
@@ -214,17 +212,6 @@ class ActivityExportingDelegate(private val activity: AnkiActivity, private val 
             putExtra("android.content.extra.SHOW_FILESIZE", true)
         }
         mSaveFileLauncher.launch(saveIntent)
-    }
-
-    fun onSaveInstanceState(outState: Bundle) {
-        if (::fileExportPath.isInitialized) {
-            outState.putString(EXPORT_FILE_NAME_KEY, fileExportPath)
-        }
-    }
-
-    fun onRestoreInstanceState(savedInstanceState: Bundle?) {
-        val restoredValue = savedInstanceState?.getString(EXPORT_FILE_NAME_KEY) ?: return
-        fileExportPath = restoredValue
     }
 
     private fun saveFileCallback(result: ActivityResult) {
@@ -244,12 +231,12 @@ class ActivityExportingDelegate(private val activity: AnkiActivity, private val 
             return false
         }
         val uri = intent.data
-        Timber.d("Exporting from file to ContentProvider URI: %s/%s", fileExportPath, uri.toString())
+        Timber.d("Exporting from file to ContentProvider URI: %s/%s", mExportFileName, uri.toString())
         try {
             activity.contentResolver.openFileDescriptor(uri!!, "w").use { pfd ->
                 if (pfd != null) {
                     FileOutputStream(pfd.fileDescriptor).use { fileOutputStream ->
-                        CompatHelper.compat.copyFile(fileExportPath, fileOutputStream)
+                        CompatHelper.compat.copyFile(mExportFileName, fileOutputStream)
                     }
                 } else {
                     Timber.w(
@@ -259,11 +246,11 @@ class ActivityExportingDelegate(private val activity: AnkiActivity, private val 
                     return false
                 }
             }
-            if (deleteAfterExport && !File(fileExportPath).delete()) {
-                Timber.w("Failed to delete temporary export file %s", fileExportPath)
+            if (deleteAfterExport && !File(mExportFileName).delete()) {
+                Timber.w("Failed to delete temporary export file %s", mExportFileName)
             }
         } catch (e: Exception) {
-            Timber.e(e, "Unable to export file to Uri: %s/%s", fileExportPath, uri.toString())
+            Timber.e(e, "Unable to export file to Uri: %s/%s", mExportFileName, uri.toString())
             return false
         }
         return true
@@ -285,12 +272,12 @@ class ActivityExportingDelegate(private val activity: AnkiActivity, private val 
     }
 
     /**
-     * If we exported a collection (hence [fileExportPath] ends with ".colpkg"), save in the preferences
+     * If we exported a collection (hence [mExportFileName] ends with ".colpkg"), save in the preferences
      * the mod of the collection and the time at which it occurred.
      * This will allow to check whether a recent export was made, hence scoped storage migration is safe.
      */
     private fun saveSuccessfulCollectionExportIfRelevant() {
-        if (!fileExportPath.endsWith(".colpkg")) return
+        if (::mExportFileName.isInitialized && !mExportFileName.endsWith(".colpkg")) return
         activity.sharedPrefs().edit {
             putLong(
                 LAST_SUCCESSFUL_EXPORT_AT_SECOND_KEY,
@@ -307,6 +294,5 @@ class ActivityExportingDelegate(private val activity: AnkiActivity, private val 
     }
 }
 
-private const val EXPORT_FILE_NAME_KEY = "export_file_name_key"
 const val LAST_SUCCESSFUL_EXPORT_AT_MOD_KEY = "last_successful_export_mod"
 const val LAST_SUCCESSFUL_EXPORT_AT_SECOND_KEY = "last_successful_export_second"

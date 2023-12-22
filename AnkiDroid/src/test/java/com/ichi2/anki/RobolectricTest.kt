@@ -289,6 +289,7 @@ open class RobolectricTest : AndroidTest {
             val controller = Robolectric.buildActivity(clazz, i)
                 .create().start().resume().visible()
             advanceRobolectricLooperWithSleep()
+            advanceRobolectricLooperWithSleep()
             testClass.saveControllerForCleanup(controller)
             return controller.get()
         }
@@ -388,6 +389,7 @@ open class RobolectricTest : AndroidTest {
      * @see org.junit.matchers.JUnitMatchers
      */
     fun <T> assumeThat(actual: T, matcher: Matcher<T>?) {
+        advanceRobolectricLooperWithSleep()
         Assume.assumeThat(actual, matcher)
     }
 
@@ -409,6 +411,7 @@ open class RobolectricTest : AndroidTest {
      * @see org.junit.matchers.JUnitMatchers
      */
     fun <T> assumeThat(message: String?, actual: T, matcher: Matcher<T>?) {
+        advanceRobolectricLooperWithSleep()
         Assume.assumeThat(message, actual, matcher)
     }
 
@@ -420,6 +423,7 @@ open class RobolectricTest : AndroidTest {
      * @param message A message to pass to [AssumptionViolatedException]
      */
     fun assumeTrue(message: String?, b: Boolean) {
+        advanceRobolectricLooperWithSleep()
         Assume.assumeTrue(message, b)
     }
 

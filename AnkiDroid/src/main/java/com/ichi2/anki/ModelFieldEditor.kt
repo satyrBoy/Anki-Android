@@ -31,6 +31,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.FragmentManager
 import com.google.android.material.snackbar.Snackbar
+import com.ichi2.anim.ActivityTransitionAnimation
 import com.ichi2.anki.CollectionManager.withCol
 import com.ichi2.anki.UIUtils.showThemedToast
 import com.ichi2.anki.dialogs.ConfirmationDialog
@@ -461,7 +462,7 @@ class ModelFieldEditor : AnkiActivity(), LocaleSelectionDialogHandler {
     }
 
     private fun closeActivity() {
-        finish()
+        finishWithAnimation(ActivityTransitionAnimation.Direction.END)
     }
 
     fun handleAction(contextMenuAction: ModelEditorContextMenuAction) {

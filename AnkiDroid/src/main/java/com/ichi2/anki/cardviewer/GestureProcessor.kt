@@ -39,7 +39,6 @@ class GestureProcessor(private val processor: ViewerCommand.CommandProcessor?) {
     private var gestureTapCenter: ViewerCommand? = null
     private var gestureTapBottomLeft: ViewerCommand? = null
     private var gestureTapBottomRight: ViewerCommand? = null
-    private var gestureShake: ViewerCommand? = null
     private val gestureMapper = GestureMapper()
 
     /**
@@ -72,7 +71,6 @@ class GestureProcessor(private val processor: ViewerCommand.CommandProcessor?) {
         gestureTapRight = associatedCommands[Gesture.TAP_RIGHT]
         gestureTapTop = associatedCommands[Gesture.TAP_TOP]
         gestureTapBottom = associatedCommands[Gesture.TAP_BOTTOM]
-        gestureShake = associatedCommands[Gesture.SHAKE]
 
         val useCornerTouch = preferences.getBoolean("gestureCornerTouch", false)
         if (useCornerTouch) {
@@ -102,10 +100,6 @@ class GestureProcessor(private val processor: ViewerCommand.CommandProcessor?) {
         return execute(gesture)
     }
 
-    fun onShake(): Boolean? {
-        return execute(Gesture.SHAKE)
-    }
-
     private fun execute(gesture: Gesture?): Boolean? {
         val command = mapGestureToCommand(gesture) ?: return false
         return processor?.executeCommand(command, gesture)
@@ -128,7 +122,6 @@ class GestureProcessor(private val processor: ViewerCommand.CommandProcessor?) {
             Gesture.TAP_BOTTOM_RIGHT -> gestureTapBottomRight
             Gesture.DOUBLE_TAP -> gestureDoubleTap
             Gesture.LONG_TAP -> gestureLongclick
-            Gesture.SHAKE -> gestureShake
             else -> null
         }
     }

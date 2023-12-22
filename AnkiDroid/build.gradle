@@ -74,8 +74,8 @@ android {
         //
         // This ensures the correct ordering between the various types of releases (dev < alpha < beta < release) which is
         // needed for upgrades to be offered correctly.
-        versionCode=21700113
-        versionName="2.17alpha13"
+        versionCode=21700112
+        versionName="2.17alpha12"
         minSdk 23
         // After #13695: change .tests_emulator.yml
         targetSdk 33 // change api/build.gradle.kts and update ../robolectricDownloader.gradle at same time
@@ -322,7 +322,6 @@ dependencies {
     implementation 'com.vanniktech:android-image-cropper:4.5.0'
     implementation 'org.nanohttpd:nanohttpd:2.3.1'
     implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2"
-    implementation 'com.squareup:seismic:1.0.3'
 
     // Backend libraries
 

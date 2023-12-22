@@ -99,7 +99,8 @@
         the full package path is needed for manageSpaceActivity -->
         <activity
             android:name="com.ichi2.anki.ui.windows.managespace.ManageSpaceActivity"
-            android:exported="true"/>
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
         <activity android:name=".DrawingActivity"
             android:label="@string/drawing"
             android:exported="false"
@@ -107,8 +108,9 @@
             />
         <activity
             android:name="com.ichi2.anki.pages.PagesActivity"
+            android:configChanges="keyboardHidden|orientation|screenSize"
             android:exported="true"
-            />
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
         <activity
             android:name="com.ichi2.anki.IntentHandler"
             android:configChanges="keyboardHidden|orientation|screenSize"

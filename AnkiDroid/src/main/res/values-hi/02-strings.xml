@@ -52,7 +52,7 @@
     <string name="CardEditorModel">प्रकार:</string>
     <string name="CardEditorTags">टैग: %1$s</string>
     <string name="CardEditorCards">पत्ते: %1$s</string>
-    <string name="edit_occlusions">निष्कर्ष को एडिट   करें</string>
+    <string name="edit_occlusions">Edit Occlusions</string>
     <string name="tag_name">टैग नाम</string>
     <string name="add_new_filter_tags">टैग को जोड़ें/छानें</string>
     <string name="add_tag">टैग जोड़ें</string>
@@ -317,7 +317,7 @@
     <string name="scoped_storage_postpone">स्थगित करें</string>
     <string name="scoped_storage_migrate">माइग्रेट करें</string>
     <string name="search_card_js_api_no_results">खोज का कोई परिणाम नहीं निकला</string>
-    <string name="migration_update_request_requires_media_sync" commnet="use HTML linebreaks in this string">एंड्रॉइड 10 की सुरक्षा नीति का अनुपालन करने के लिए, अंकीड्रॉइड के स्टोरेज को माइग्रेट करना (अंकीड्रॉइड के डेटा को ऐप को समर्पित एक नए स्टोरेज स्थान पर ले जाना) आवश्यक है। \n\nमाइग्रेशन आपको अपने मीडिया को पहले की तुलना में तेज़ी से सिंक्रोनाइज़ करने की अनुमति देता है। &lt;br&gt;&lt;br&gt;माइग्रेशन प्रक्रिया के दौरान, आप सिंक सुविधा का उपयोग नहीं कर पाएंगे या कुछ सेटिंग्स नहीं बदल पाएंगे। माइग्रेशन प्रक्रिया शुरू करने से पहले, डेटा हानि की स्थिति में मीडिया सहित एक सिंक्रोनाइज़ेशन करें। &lt;br&gt;&lt;br&gt;माइग्रेशन प्रक्रिया के दौरान आप अभी भी AnkiDroid का उपयोग कर सकते हैं। साथ ही, यदि आप माइग्रेशन प्रक्रिया के दौरान AnkiDroid स्क्रीन बंद कर देते हैं तो कोई समस्या नहीं है।</string>
+    <string name="migration_update_request_requires_media_sync" commnet="use HTML linebreaks in this string">AnkiDroid needs to migrate its storage to comply with Android 10 security policy.\n\nThis will improve media sync performance.&lt;br&gt;&lt;br&gt;During the migration you will be unable to sync and some settings will be disabled. A media sync will occur before the migration starts to keep your data safe.&lt;br&gt;&lt;br&gt;It is safe to use or close AnkiDroid during this process.</string>
     <string name="start_migration_progress_message">स्टोरेज माइग्रेशन प्रारंभ हो रहा है. आप शीघ्र ही अंकीड्रॉइड का उपयोग फिर से शुरू कर सकते हैं।</string>
     <string name="migration_part_1_done_resume">आप अंकीड्रॉइड का उपयोग फिर से शुरू कर सकते हैं.
 \nस्टोरेज माइग्रेशन पृष्ठभूमि में जारी रहेगा.</string>
@@ -325,7 +325,7 @@
     <string name="not_valid_js_addon">%s एक वैध जावास्क्रिप्ट एडऑन पैकेज नहीं है</string>
     <string name="could_not_create_dir">निर्देशिका नहीं बन सका %s</string>
     <string name="malicious_archive_entry_outside">दुर्भावनापूर्ण संग्रह. लक्ष्य निर्देशिका के बाहर प्रविष्टि शामिल है: %s</string>
-    <string name="malicious_archive_exceeds_limit">दुर्भावनापूर्ण ढंग से संग्रहीत दस्तावेज़. आकार %1$s से अधिक है या इसमें %2$d से अधिक फ़ाइलें हैं।</string>
+    <string name="malicious_archive_exceeds_limit">Malicious archive. Size exceeds %1$s or contains more than %2$d files</string>
     <string name="file_extract_exceeds_storage_space">फ़ाइल एक्सट्रेक्ट स्टोरेज स्पेस को पार कर गया है</string>
     <!--  Hierarchical Tags  -->
     <string name="expand_tag">टैग \'%s\' विस्तृत करें</string>
@@ -356,17 +356,20 @@
     <string name="media_sync_required_title">मीडिया सिंक आवश्यक</string>
     <string name="media_sync_unavailable_message">सेटिंग्स में मीडिया सिंक अक्षम है। जारी रखने से पहले जो भी मीडिया सिंक नहीं हुआ है उसे सिंक और बैकअप करें</string>
     <string name="audio_saved">रिकॉर्डिंग को सहेजा गया</string>
-    <string name="deleting_selected_notes">चयनित नोट्स हटाये जा रहे हैं</string>
-    <string name="tts_voices_default_text" comment="The default text to speak when selecting     Text to speech voices">सुनने के लिए किसी आवाज़ पर टैप करें
+    <string name="deleting_selected_notes">Deleting selected notes</string>
+    <string name="tts_voices_default_text" comment="The default text to speak when selecting     Text to speech voices">        Tap a voice to listen
     </string>
-    <string name="tts_voices_selected_voice_should_be_installed" comment="If a voice has been tapped, is installable but not installed, we want to inform the user that they should install it for the best experience There will also be an option to use it without downloading">उपयोग से पहले वॉइस इंस्टॉल किया जाना चाहिए</string>
-    <string name="tts_voices_use_selected_voice_without_install" comment="A user has been informed that a voice should be installed before use. This is text on a snackbar button which allows them to use the voice without installing it">कैसे भी प्रयोग करें
-
+    <string name="tts_voices_selected_voice_should_be_installed" comment="If a voice has been tapped, is installable but not installed, we want to inform the user that they should install it for the best experience There will also be an option to use it without downloading">Voice should be installed before use
     </string>
-    <string name="tts_voices_playback_error" comment="an error occurred when playing a text to speech voice. The parameter is a technical error code such as \'ERROR_NOT_INSTALLED_YET\' or \'ERROR_NETWORK_TIMEOUT\'">ऑडियो त्रुटि (%s)</string>
+    <string name="tts_voices_use_selected_voice_without_install" comment="A user has been informed that a voice should be installed before use. This is text on a snackbar button which allows them to use the voice without installing it">Use anyway
+    </string>
+    <string name="tts_voices_playback_error" comment="an error occurred when playing a text to speech voice. The parameter is a technical error code such as \'ERROR_NOT_INSTALLED_YET\' or \'ERROR_NETWORK_TIMEOUT\'">        Audio error (%s)
+    </string>
     <!-- Chips should probably be in a separate file, due to the additional length req -->
-    <string name="tts_voices_chip_filter_to_internet" comment="     Filters a list of text to speech voices, to enable/disable voices which require the internet to     function.     This is on a chip control, so keep the text short, ideally one word">इंटरनेट</string>
-    <string name="tts_voices_chip_filter_to_installable_audio" comment="     Displays a list of Text to Speech voices which should be downloaded/installed before use     This is on a chip control, so keep the text short, ideally one word">इनस्टॉल</string>
-    <string name="tts_voices_failed_opening_tts_system_settings" comment="error message if opening the system text to speech settings fails">टेक्स्ट टू स्पीच सेटिंग खोलने में विफल</string>
-    <string name="shared_decks_login_required">कृपया अधिक डेक डाउनलोड करने के लिए लॉग इन करें</string>
+    <string name="tts_voices_chip_filter_to_internet" comment="     Filters a list of text to speech voices, to enable/disable voices which require the internet to     function.     This is on a chip control, so keep the text short, ideally one word">        Internet
+    </string>
+    <string name="tts_voices_chip_filter_to_installable_audio" comment="     Displays a list of Text to Speech voices which should be downloaded/installed before use     This is on a chip control, so keep the text short, ideally one word">        Install
+    </string>
+    <string name="tts_voices_failed_opening_tts_system_settings" comment="error message if opening the system text to speech settings fails">        Failed to open text to speech settings
+    </string>
 </resources>

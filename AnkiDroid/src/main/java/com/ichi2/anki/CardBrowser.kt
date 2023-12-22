@@ -30,6 +30,7 @@ import androidx.activity.result.contract.ActivityResultContracts.StartActivityFo
 import androidx.annotation.CheckResult
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.widget.SearchView
+import androidx.core.content.edit
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.flowWithLifecycle
@@ -38,19 +39,13 @@ import anki.collection.OpChanges
 import com.afollestad.materialdialogs.utils.MDUtil.ifNotZero
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.snackbar.Snackbar
+import com.ichi2.anim.ActivityTransitionAnimation
 import com.ichi2.anki.CollectionManager.TR
 import com.ichi2.anki.CollectionManager.withCol
 import com.ichi2.anki.Previewer.Companion.toIntent
 import com.ichi2.anki.UIUtils.showThemedToast
-import com.ichi2.anki.browser.CardBrowserColumn
-import com.ichi2.anki.browser.CardBrowserColumn.Companion.COLUMN1_KEYS
-import com.ichi2.anki.browser.CardBrowserColumn.Companion.COLUMN2_KEYS
-import com.ichi2.anki.browser.CardBrowserLaunchOptions
 import com.ichi2.anki.browser.CardBrowserViewModel
-import com.ichi2.anki.browser.CardBrowserViewModel.*
 import com.ichi2.anki.browser.SaveSearchResult
-import com.ichi2.anki.browser.SharedPreferencesLastDeckIdRepository
-import com.ichi2.anki.browser.toCardBrowserLaunchOptions
 import com.ichi2.anki.dialogs.*
 import com.ichi2.anki.dialogs.CardBrowserMySearchesDialog.Companion.newInstance
 import com.ichi2.anki.dialogs.CardBrowserMySearchesDialog.MySearchesDialogListener
@@ -63,14 +58,12 @@ import com.ichi2.anki.dialogs.tags.TagsDialog
 import com.ichi2.anki.dialogs.tags.TagsDialogFactory
 import com.ichi2.anki.dialogs.tags.TagsDialogListener
 import com.ichi2.anki.export.ActivityExportingDelegate
-import com.ichi2.anki.introduction.hasCollectionStoragePermissions
 import com.ichi2.anki.model.CardStateFilter
 import com.ichi2.anki.model.CardsOrNotes
 import com.ichi2.anki.model.CardsOrNotes.*
 import com.ichi2.anki.model.SortType
 import com.ichi2.anki.pages.CardInfo.Companion.toIntent
 import com.ichi2.anki.preferences.sharedPrefs
-import com.ichi2.anki.previewer.PreviewerFragment
 import com.ichi2.anki.receiver.SdCardReceiver
 import com.ichi2.anki.servicelayer.NoteService.isMarked
 import com.ichi2.anki.servicelayer.avgIntervalOfNote
@@ -90,10 +83,10 @@ import com.ichi2.ui.CardBrowserSearchView
 import com.ichi2.ui.FixedTextView
 import com.ichi2.utils.*
 import com.ichi2.utils.HandlerUtils.postDelayedOnNewHandler
+import com.ichi2.utils.Permissions.hasStorageAccessPermission
 import com.ichi2.utils.TagsUtil.getUpdatedTags
 import com.ichi2.widget.WidgetStatus.updateInBackground
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import net.ankiweb.rsdroid.RustCleanup
@@ -116,8 +109,13 @@ open class CardBrowser :
         deck?.let {
             val deckId = deck.deckId
             deckSpinnerSelection!!.initializeActionBarDeckSpinner(this.supportActionBar!!)
-            launchCatchingTask { selectDeckAndSave(deckId) }
+            deckSpinnerSelection!!.selectDeckById(deckId, true)
+            selectDeckAndSave(deckId)
         }
+    }
+
+    enum class Column {
+        QUESTION, ANSWER, FLAGS, SUSPENDED, MARKED, SFLD, DECK, TAGS, ID, CARD, DUE, EASE, CHANGED, CREATED, EDITED, INTERVAL, LAPSES, NOTE_TYPE, REVIEWS
     }
 
     private enum class TagsDialogListenerAction {
@@ -125,8 +123,6 @@ open class CardBrowser :
     }
 
     lateinit var viewModel: CardBrowserViewModel
-
-    private var launchOptions: CardBrowserLaunchOptions? = null
 
     /** List of cards in the browser.
      * When the list is changed, the position member of its elements should get changed. */
@@ -143,6 +139,9 @@ open class CardBrowser :
     private var mSearchTerms
         get() = viewModel.searchTerms
         set(value) { viewModel.searchTerms = value }
+    private var mRestrictOnDeck
+        get() = viewModel.restrictOnDeck
+        set(value) { viewModel.restrictOnDeck = value }
     private var mCurrentFlag
         get() = viewModel.currentFlag
         set(value) { viewModel.currentFlag = value }
@@ -161,6 +160,12 @@ open class CardBrowser :
     private var mCurrentCardId
         get() = viewModel.currentCardId
         set(value) { viewModel.currentCardId = value }
+    private var mOrder
+        get() = viewModel.order
+        set(value) { viewModel.order = value }
+    private var mOrderAsc
+        get() = viewModel.orderAsc
+        set(value) { viewModel.orderAsc = value }
 
     // DEFECT: Doesn't need to be a local
     private var mTagsDialogListenerAction: TagsDialogListenerAction? = null
@@ -249,6 +254,11 @@ open class CardBrowser :
      * Broadcast that informs us when the sd card is about to be unmounted
      */
     private var mUnmountReceiver: BroadcastReceiver? = null
+    private val orderSingleChoiceDialogListener: DialogInterface.OnClickListener =
+        DialogInterface.OnClickListener { dialog: DialogInterface, which: Int ->
+            dialog.dismiss()
+            changeCardOrder(SortType.fromCardBrowserLabelIndex(which))
+        }
 
     init {
         ChangeManager.subscribe(this)
@@ -256,13 +266,20 @@ open class CardBrowser :
 
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
     fun changeCardOrder(which: SortType) {
-        when (viewModel.changeCardOrder(which)) {
-            ChangeCardOrderResult.OrderChange -> { searchCards() }
-            ChangeCardOrderResult.DirectionChange -> {
-                mCards.reverse()
-                updateList()
-            }
-            null -> {}
+        if (which != mOrder) {
+            mOrder = which
+            mOrderAsc = false
+            which.save(getColUnsafe.config, baseContext.sharedPrefs())
+            getColUnsafe.config.set("sortBackwards", mOrderAsc)
+            getColUnsafe.config.set("browserNoteSortBackwards", mOrderAsc)
+            searchCards()
+        } else if (which != SortType.NO_SORTING) {
+            // if the same element is selected again, reverse the order
+            mOrderAsc = !mOrderAsc
+            getColUnsafe.config.set("sortBackwards", mOrderAsc)
+            getColUnsafe.config.set("browserNoteSortBackwards", mOrderAsc)
+            mCards.reverse()
+            updateList()
         }
     }
 
@@ -354,6 +371,22 @@ open class CardBrowser :
         }
     }
 
+    @get:VisibleForTesting
+    val lastDeckId: DeckId?
+        get() = getSharedPreferences(PERSISTENT_STATE_FILE, 0)
+            .getLong(LAST_DECK_ID_KEY, Decks.NOT_FOUND_DECK_ID)
+            .takeUnless { it == Decks.NOT_FOUND_DECK_ID }
+
+    private fun saveLastDeckId(id: Long?) {
+        if (id == null) {
+            clearLastDeckId()
+            return
+        }
+        getSharedPreferences(PERSISTENT_STATE_FILE, 0).edit {
+            putLong(LAST_DECK_ID_KEY, id)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         if (showedActivityFailedScreen(savedInstanceState)) {
             return
@@ -364,8 +397,7 @@ open class CardBrowser :
         mTagsDialogFactory = TagsDialogFactory(this).attachToActivity<TagsDialogFactory>(this)
         mExportingDelegate = ActivityExportingDelegate(this) { getColUnsafe }
         super.onCreate(savedInstanceState)
-        if (wasLoadedFromExternalTextActionItem() && !hasCollectionStoragePermissions()) {
-            // we need to do this as DeckPicker still contains app init logic/upgrade logic
+        if (wasLoadedFromExternalTextActionItem() && !hasStorageAccessPermission(this) && !Permissions.isExternalStorageManagerCompat()) {
             Timber.w("'Card Browser' Action item pressed before storage permissions granted.")
             showThemedToast(
                 this,
@@ -375,7 +407,6 @@ open class CardBrowser :
             displayDeckPickerForPermissionsDialog()
             return
         }
-        launchOptions = intent?.toCardBrowserLaunchOptions() // must be called after super.onCreate()
         setContentView(R.layout.card_browser)
         initNavigationDrawer(findViewById(android.R.id.content))
         // initialize the lateinit variables
@@ -404,21 +435,20 @@ open class CardBrowser :
         cardsListView.setOnScrollListener(RenderOnScroll())
         startLoadingCollection()
 
-        when (val options = launchOptions) {
-            is CardBrowserLaunchOptions.DeepLink -> {
-                mSearchTerms = options.search
-                searchCards()
-            }
-            is CardBrowserLaunchOptions.SearchQueryJs -> {
-                mSearchTerms = options.search
-                if (options.allDecks) {
-                    onDeckSelected(SelectableDeck(ALL_DECKS_ID, getString(R.string.card_browser_all_decks)))
-                }
-                searchCards()
-            }
-            else -> {} // Context Menu handled in onCreateOptionsMenu
+        // search card using deep links
+        intent.data?.getQueryParameter("search")?.let {
+            mSearchTerms = it
+            searchCards()
         }
-        mExportingDelegate.onRestoreInstanceState(savedInstanceState)
+
+        // for intent coming from search query js api
+        intent.getStringExtra("search_query")?.let {
+            mSearchTerms = it
+            if (intent.getBooleanExtra("all_decks", false)) {
+                onDeckSelected(SelectableDeck(ALL_DECKS_ID, getString(R.string.card_browser_all_decks)))
+            }
+            searchCards()
+        }
 
         // Selected cards aren't restored on activity recreation,
         // so it is necessary to dismiss the change deck dialog
@@ -455,16 +485,6 @@ open class CardBrowser :
             .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
             .onEach { index -> cardsAdapter.updateMapping { it[1] = COLUMN2_KEYS[index] } }
             .launchIn(lifecycleScope)
-
-        viewModel.deckIdFlow
-            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
-            .filterNotNull()
-            .onEach { deckId ->
-                // this handles ALL_DECKS_ID
-                deckSpinnerSelection!!.selectDeckById(deckId, true)
-                searchCards()
-            }
-            .launchIn(lifecycleScope)
     }
 
     fun searchWithFilterQuery(filterQuery: String) {
@@ -478,6 +498,10 @@ open class CardBrowser :
         super.onCollectionLoaded(col)
         Timber.d("onCollectionLoaded()")
         registerExternalStorageListener()
+        val preferences = baseContext.sharedPrefs()
+
+        mOrder = SortType.fromCol(col.config, preferences)
+        mOrderAsc = col.config.get("sortBackwards") ?: false
         mCards.reset()
         // Create a spinner for column 1
         findViewById<Spinner>(R.id.browser_column1_spinner).apply {
@@ -542,6 +566,7 @@ open class CardBrowser :
             true
         }
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+        val deckId = col.decks.selected()
         deckSpinnerSelection = DeckSpinnerSelection(
             this,
             col,
@@ -551,20 +576,28 @@ open class CardBrowser :
             showFilteredDecks = true
         )
         deckSpinnerSelection!!.initializeActionBarDeckSpinner(this.supportActionBar!!)
+        selectDeckAndSave(deckId)
 
-        launchCatchingTask {
-            val deckId = withCol { decks.selected() }
-            // WARN: This is required to set `restrictOnDeck`
-            selectDeckAndSave(deckId)
-            when (viewModel.getInitialDeck()) {
-                ALL_DECKS_ID -> selectAllDecks()
-                else -> deckSpinnerSelection!!.selectDeckById(viewModel.lastDeckId!!, false)
-            }
+        // If a valid value for last deck exists then use it, otherwise use libanki selected deck
+        if (lastDeckId != null && lastDeckId == ALL_DECKS_ID) {
+            selectAllDecks()
+        } else if (lastDeckId != null && col.decks.get(lastDeckId!!) != null) {
+            deckSpinnerSelection!!.selectDeckById(lastDeckId!!, false)
+        } else {
+            deckSpinnerSelection!!.selectDeckById(col.decks.selected(), false)
         }
     }
 
-    suspend fun selectDeckAndSave(deckId: DeckId) {
-        viewModel.setDeckId(deckId)
+    fun selectDeckAndSave(deckId: DeckId) {
+        deckSpinnerSelection!!.selectDeckById(deckId, true)
+        mRestrictOnDeck = if (deckId == ALL_DECKS_ID) {
+            ""
+        } else {
+            val deckName = getColUnsafe.decks.name(deckId)
+            "deck:\"$deckName\" "
+        }
+        saveLastDeckId(deckId)
+        searchCards()
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -631,8 +664,11 @@ open class CardBrowser :
     }
 
     @VisibleForTesting
-    suspend fun selectAllDecks() {
-        viewModel.setDeckId(ALL_DECKS_ID)
+    fun selectAllDecks() {
+        deckSpinnerSelection!!.selectAllDecks()
+        mRestrictOnDeck = ""
+        saveLastDeckId(ALL_DECKS_ID)
+        searchCards()
     }
 
     /** Opens the note editor for a card.
@@ -644,7 +680,7 @@ open class CardBrowser :
         val editCard = Intent(this, NoteEditor::class.java)
             .putExtra(NoteEditor.EXTRA_CALLER, NoteEditor.CALLER_CARDBROWSER_EDIT)
             .putExtra(NoteEditor.EXTRA_CARD_ID, cardBrowserCard!!.id)
-        onEditCardActivityResult.launch(editCard)
+        launchActivityForResultWithAnimation(editCard, onEditCardActivityResult, ActivityTransitionAnimation.Direction.START)
         // #6432 - FIXME - onCreateOptionsMenu crashes if receiving an activity result from edit card when in multiselect
         endMultiSelectMode()
     }
@@ -776,14 +812,16 @@ open class CardBrowser :
             title = getColUnsafe.undoLabel()
         }
 
-        launchOptions?.let { options ->
-            if (options !is CardBrowserLaunchOptions.SystemContextMenu) return@let
-            // Fill in the search.
-            Timber.i("CardBrowser :: Called with search intent: %s", launchOptions.toString())
-            searchWithFilterQuery(options.search.toString())
-            launchOptions = null
+        // Maybe we were called from ACTION_PROCESS_TEXT.
+        // In that case we already fill in the search.
+        if (Intent.ACTION_PROCESS_TEXT == intent.action) {
+            val search = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)
+            if (!search.isNullOrEmpty()) {
+                Timber.i("CardBrowser :: Called with search intent: %s", search.toString())
+                mSearchView!!.setQuery(search, true)
+                intent.action = Intent.ACTION_DEFAULT
+            }
         }
-
         mPreviewItem = menu.findItem(R.id.action_preview)
         onSelectionChanged()
         updatePreviewMenuItem()
@@ -804,8 +842,8 @@ open class CardBrowser :
         deckPicker.action = Intent.ACTION_MAIN
         deckPicker.addCategory(Intent.CATEGORY_LAUNCHER)
         deckPicker.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        startActivity(deckPicker)
-        finish()
+        startActivityWithAnimation(deckPicker, ActivityTransitionAnimation.Direction.FADE)
+        finishActivityWithFade(this)
         this.setResult(RESULT_CANCELED)
     }
 
@@ -955,13 +993,7 @@ open class CardBrowser :
                 return true
             }
             R.id.action_sort_by_size -> {
-                showDialogFragment(
-                    // TODO: move this into the ViewModel
-                    CardBrowserOrderDialog.newInstance { dialog: DialogInterface, which: Int ->
-                        dialog.dismiss()
-                        changeCardOrder(SortType.fromCardBrowserLabelIndex(which))
-                    }
-                )
+                showDialogFragment(CardBrowserOrderDialog.newInstance(mOrder, mOrderAsc, orderSingleChoiceDialogListener))
                 return true
             }
 
@@ -1125,7 +1157,7 @@ open class CardBrowser :
             R.id.action_view_card_info -> {
                 viewModel.cardInfoDestination?.let { destination ->
                     val intent: Intent = destination.toIntent(this)
-                    startActivity(intent)
+                    startActivityWithAnimation(intent, ActivityTransitionAnimation.Direction.FADE)
                 }
                 return true
             }
@@ -1214,11 +1246,7 @@ open class CardBrowser :
         }
 
     private fun getPreviewIntent(index: Int, selectedCardIds: LongArray): Intent {
-        return if (sharedPrefs().getBoolean("new_previewer", false)) {
-            Previewer2Destination(index, selectedCardIds).toIntent(this)
-        } else {
-            PreviewDestination(index, selectedCardIds).toIntent(this)
-        }
+        return PreviewDestination(index, selectedCardIds).toIntent(this)
     }
 
     private fun rescheduleSelectedCards() {
@@ -1275,15 +1303,15 @@ open class CardBrowser :
         get() {
             val intent = Intent(this@CardBrowser, NoteEditor::class.java)
             intent.putExtra(NoteEditor.EXTRA_CALLER, NoteEditor.CALLER_CARDBROWSER_ADD)
-            if (viewModel.lastDeckId?.let { id -> id > 0 } == true) {
-                intent.putExtra(NoteEditor.EXTRA_DID, viewModel.lastDeckId)
+            if (lastDeckId?.let { id -> id > 0 } == true) {
+                intent.putExtra(NoteEditor.EXTRA_DID, lastDeckId)
             }
             intent.putExtra(NoteEditor.EXTRA_TEXT_FROM_SEARCH_VIEW, mSearchTerms)
             return intent
         }
 
     private fun addNoteFromCardBrowser() {
-        onAddNoteActivityResult.launch(addNoteIntent)
+        launchActivityForResultWithAnimation(addNoteIntent, onAddNoteActivityResult, ActivityTransitionAnimation.Direction.START)
     }
 
     private val reviewerCardId: CardId
@@ -1346,7 +1374,6 @@ open class CardBrowser :
         savedInstanceState.putBoolean("mPostAutoScroll", mPostAutoScroll)
         savedInstanceState.putInt("mLastSelectedPosition", mLastSelectedPosition)
         savedInstanceState.putBoolean("mInMultiSelectMode", isInMultiSelectMode)
-        mExportingDelegate.onSaveInstanceState(savedInstanceState)
         super.onSaveInstanceState(savedInstanceState)
     }
 
@@ -1383,13 +1410,13 @@ open class CardBrowser :
         val searchText: String? = if (mSearchTerms.contains("deck:")) {
             "($mSearchTerms)"
         } else {
-            if ("" != mSearchTerms) "${viewModel.restrictOnDeck}($mSearchTerms)" else viewModel.restrictOnDeck
+            if ("" != mSearchTerms) "$mRestrictOnDeck($mSearchTerms)" else mRestrictOnDeck
         }
         // clear the existing card list
         mCards.reset()
         cardsAdapter.notifyDataSetChanged()
         val query = searchText!!
-        val order = viewModel.order.toSortOrder()
+        val order = mOrder.toSortOrder()
         launchCatchingTask {
             Timber.d("performing search")
             val cards = withProgress { searchForCards(query, order, viewModel.cardsOrNotes) }
@@ -1628,11 +1655,11 @@ open class CardBrowser :
         return v?.top ?: 0
     }
 
-    fun hasSelectedAllDecks(): Boolean = viewModel.lastDeckId == ALL_DECKS_ID
+    fun hasSelectedAllDecks(): Boolean = lastDeckId == ALL_DECKS_ID
 
-    fun searchAllDecks() = launchCatchingTask {
+    fun searchAllDecks() {
         // all we need to do is select all decks
-        viewModel.setDeckId(ALL_DECKS_ID)
+        selectAllDecks()
     }
 
     /**
@@ -1642,10 +1669,10 @@ open class CardBrowser :
      */
     val selectedDeckNameForUi: String
         get() = try {
-            when (val deckId = viewModel.lastDeckId) {
+            when (lastDeckId) {
                 null -> getString(R.string.card_browser_unknown_deck_name)
                 ALL_DECKS_ID -> getString(R.string.card_browser_all_decks)
-                else -> getColUnsafe.decks.name(deckId)
+                else -> getColUnsafe.decks.name(lastDeckId!!)
             }
         } catch (e: Exception) {
             Timber.w(e, "Unable to get selected deck name")
@@ -1670,7 +1697,7 @@ open class CardBrowser :
     private fun closeCardBrowser(result: Int, data: Intent? = null) {
         // Set result and finish
         setResult(result, data)
-        finish()
+        finishWithAnimation(ActivityTransitionAnimation.Direction.END)
     }
 
     /**
@@ -1754,7 +1781,7 @@ open class CardBrowser :
     inner class MultiColumnListAdapter(
         context: Context?,
         private val resource: Int,
-        private var fromKeys: Array<CardBrowserColumn>,
+        private var fromKeys: Array<Column>,
         private val toIds: IntArray,
         private val fontSizeScalePcent: Int
     ) : BaseAdapter() {
@@ -1833,14 +1860,14 @@ open class CardBrowser :
             }
         }
 
-        private var fromMapping: Array<CardBrowserColumn>
+        private var fromMapping: Array<Column>
             get() = fromKeys
             set(from) {
                 fromKeys = from
                 notifyDataSetChanged()
             }
 
-        fun updateMapping(fn: (Array<CardBrowserColumn>) -> Unit) {
+        fun updateMapping(fn: (Array<Column>) -> Unit) {
             val fromMap = fromMapping
             fn(fromMap)
             // this doesn't need to be run on the UI thread: this calls notifyDataSetChanged()
@@ -1897,7 +1924,7 @@ open class CardBrowser :
      */
     private fun createViewModel() = ViewModelProvider(
         viewModelStore,
-        CardBrowserViewModel.factory(SharedPreferencesLastDeckIdRepository()),
+        CardBrowserViewModel.factory(),
         defaultViewModelCreationExtras
     )[CardBrowserViewModel::class.java]
 
@@ -1994,29 +2021,29 @@ open class CardBrowser :
                 }
             }
 
-        fun getColumnHeaderText(key: CardBrowserColumn?): String? {
+        fun getColumnHeaderText(key: Column?): String? {
             return when (key) {
-                CardBrowserColumn.FLAGS -> Integer.valueOf(card.userFlag()).toString()
-                CardBrowserColumn.SUSPENDED -> if (card.queue == Consts.QUEUE_TYPE_SUSPENDED) "True" else "False"
-                CardBrowserColumn.MARKED -> if (isMarked(card.note())) "marked" else null
-                CardBrowserColumn.SFLD -> card.note().sFld
-                CardBrowserColumn.DECK -> col.decks.name(card.did)
-                CardBrowserColumn.TAGS -> card.note().stringTags()
-                CardBrowserColumn.CARD -> if (inCardMode) card.template().optString("name") else "${card.note().numberOfCards()}"
-                CardBrowserColumn.DUE -> card.dueString
-                CardBrowserColumn.EASE -> if (inCardMode) getEaseForCards() else getAvgEaseForNotes()
-                CardBrowserColumn.CHANGED -> LanguageUtil.getShortDateFormatFromS(if (inCardMode) card.mod else card.note().mod.toLong())
-                CardBrowserColumn.CREATED -> LanguageUtil.getShortDateFormatFromMs(card.note().id)
-                CardBrowserColumn.EDITED -> LanguageUtil.getShortDateFormatFromS(card.note().mod)
-                CardBrowserColumn.INTERVAL -> if (inCardMode) queryIntervalForCards() else queryAvgIntervalForNotes()
-                CardBrowserColumn.LAPSES -> (if (inCardMode) card.lapses else card.totalLapsesOfNote()).toString()
-                CardBrowserColumn.NOTE_TYPE -> card.model().optString("name")
-                CardBrowserColumn.REVIEWS -> if (inCardMode) card.reps.toString() else card.totalReviewsForNote().toString()
-                CardBrowserColumn.QUESTION -> {
+                Column.FLAGS -> Integer.valueOf(card.userFlag()).toString()
+                Column.SUSPENDED -> if (card.queue == Consts.QUEUE_TYPE_SUSPENDED) "True" else "False"
+                Column.MARKED -> if (isMarked(card.note())) "marked" else null
+                Column.SFLD -> card.note().sFld
+                Column.DECK -> col.decks.name(card.did)
+                Column.TAGS -> card.note().stringTags()
+                Column.CARD -> if (inCardMode) card.template().optString("name") else "${card.note().numberOfCards()}"
+                Column.DUE -> card.dueString
+                Column.EASE -> if (inCardMode) getEaseForCards() else getAvgEaseForNotes()
+                Column.CHANGED -> LanguageUtil.getShortDateFormatFromS(if (inCardMode) card.mod else card.note().mod)
+                Column.CREATED -> LanguageUtil.getShortDateFormatFromMs(card.note().id)
+                Column.EDITED -> LanguageUtil.getShortDateFormatFromS(card.note().mod)
+                Column.INTERVAL -> if (inCardMode) queryIntervalForCards() else queryAvgIntervalForNotes()
+                Column.LAPSES -> (if (inCardMode) card.lapses else card.totalLapsesOfNote()).toString()
+                Column.NOTE_TYPE -> card.model().optString("name")
+                Column.REVIEWS -> if (inCardMode) card.reps.toString() else card.totalReviewsForNote().toString()
+                Column.QUESTION -> {
                     updateSearchItemQA()
                     mQa!!.first
                 }
-                CardBrowserColumn.ANSWER -> {
+                Column.ANSWER -> {
                     updateSearchItemQA()
                     mQa!!.second
                 }
@@ -2068,7 +2095,7 @@ open class CardBrowser :
             }
             card.note()
             // First column can not be the answer. If it were to change, this code should also be changed.
-            if (COLUMN1_KEYS[column1Index] == CardBrowserColumn.QUESTION || arrayOf(CardBrowserColumn.QUESTION, CardBrowserColumn.ANSWER).contains(COLUMN2_KEYS[column2Index])) {
+            if (COLUMN1_KEYS[column1Index] == Column.QUESTION || arrayOf(Column.QUESTION, Column.ANSWER).contains(COLUMN2_KEYS[column2Index])) {
                 updateSearchItemQA()
             }
             isLoaded = true
@@ -2261,11 +2288,24 @@ open class CardBrowser :
         @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
         const val LINES_VISIBLE_WHEN_COLLAPSED = 3
 
+        private val COLUMN1_KEYS = arrayOf(Column.QUESTION, Column.SFLD)
+
+        // list of available keys in mCards corresponding to the column names in R.array.browser_column2_headings.
+        // Note: the last 6 are currently hidden
+        private val COLUMN2_KEYS = arrayOf(Column.ANSWER, Column.CARD, Column.DECK, Column.NOTE_TYPE, Column.QUESTION, Column.TAGS, Column.LAPSES, Column.REVIEWS, Column.INTERVAL, Column.EASE, Column.DUE, Column.CHANGED, Column.CREATED, Column.EDITED)
+
         // Values related to persistent state data
         private const val ALL_DECKS_ID = 0L
+        private const val PERSISTENT_STATE_FILE = "DeckPickerState"
+        private const val LAST_DECK_ID_KEY = "lastDeckId"
         const val CARD_NOT_AVAILABLE = -1
 
-        fun clearLastDeckId() = SharedPreferencesLastDeckIdRepository.clearLastDeckId()
+        fun clearLastDeckId() {
+            val context: Context = AnkiDroidApp.instance
+            context.getSharedPreferences(PERSISTENT_STATE_FILE, 0).edit {
+                remove(LAST_DECK_ID_KEY)
+            }
+        }
 
         @CheckResult
         private fun formatQA(text: String, context: Context): String {
@@ -2313,9 +2353,3 @@ suspend fun searchForCards(
 private fun Sequence<CardId>.toCardCache(col: com.ichi2.libanki.Collection, isInCardMode: CardsOrNotes): Sequence<CardBrowser.CardCache> {
     return this.mapIndexed { idx, cid -> CardBrowser.CardCache(cid, col, idx, isInCardMode) }
 }
-
-class Previewer2Destination(val currentIndex: Int, val selectedCardIds: LongArray)
-
-@CheckResult
-fun Previewer2Destination.toIntent(context: Context) =
-    PreviewerFragment.getIntent(context, selectedCardIds, currentIndex)

@@ -149,7 +149,7 @@ object CollectionManager {
         }
 
     fun compareAnswer(expected: String, given: String): String {
-        // bypass the lock, as the type answer code is heavily nested in non-suspend functions
+        // bypass the lock, as the type answer code is heavily nested in non-suspend funs
         return getBackend().compareAnswer(expected, given)
     }
 

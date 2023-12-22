@@ -276,7 +276,7 @@ abstract class NavigationDrawerActivity :
      */
     protected open fun onNavigationPressed() {
         if (mNavButtonGoesBack) {
-            finish()
+            finishWithAnimation(END)
         } else {
             openDrawer()
         }
@@ -301,7 +301,7 @@ abstract class NavigationDrawerActivity :
                     val deckPicker = Intent(this@NavigationDrawerActivity, DeckPicker::class.java)
                     // opening DeckPicker should use the instance on the back stack & clear back history
                     deckPicker.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    startActivity(deckPicker)
+                    startActivityWithAnimation(deckPicker, END)
                 }
 
                 R.id.nav_browser -> {
@@ -312,13 +312,19 @@ abstract class NavigationDrawerActivity :
                 R.id.nav_stats -> {
                     Timber.i("Navigating to stats")
                     val intent = com.ichi2.anki.pages.Statistics.getIntent(this)
-                    startActivity(intent)
+                    startActivityWithAnimation(intent, START)
                 }
 
                 R.id.nav_settings -> {
                     Timber.i("Navigating to settings")
-                    val intent = Intent(this, Preferences::class.java)
-                    mPreferencesLauncher.launch(intent)
+                    launchActivityForResultWithAnimation(
+                        Intent(
+                            this@NavigationDrawerActivity,
+                            Preferences::class.java
+                        ),
+                        mPreferencesLauncher,
+                        FADE
+                    )
                 }
 
                 R.id.nav_help -> {
@@ -341,7 +347,7 @@ abstract class NavigationDrawerActivity :
         if (currentCardId != null) {
             intent.putExtra("currentCard", currentCardId)
         }
-        startActivity(intent)
+        startActivityWithAnimation(intent, START)
     }
 
     // Override this to specify a specific card id

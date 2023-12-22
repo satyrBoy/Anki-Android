@@ -26,7 +26,6 @@ import android.content.*
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.hardware.SensorManager
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.*
@@ -76,6 +75,7 @@ import com.ichi2.anki.reviewer.*
 import com.ichi2.anki.reviewer.AutomaticAnswer.AutomaticallyAnswered
 import com.ichi2.anki.reviewer.FullScreenMode.Companion.DEFAULT
 import com.ichi2.anki.reviewer.FullScreenMode.Companion.fromPreference
+import com.ichi2.anki.reviewer.ReviewerUi.ControlBlock
 import com.ichi2.anki.servicelayer.LanguageHintService.applyLanguageHint
 import com.ichi2.anki.servicelayer.NoteService.isMarked
 import com.ichi2.anki.services.migrationServiceWhileStartedOrNull
@@ -101,7 +101,6 @@ import com.ichi2.utils.HandlerUtils.executeFunctionWithDelay
 import com.ichi2.utils.HandlerUtils.newHandler
 import com.ichi2.utils.HashUtil.hashSetInit
 import com.ichi2.utils.WebViewDebugging.initializeDebugging
-import com.squareup.seismic.ShakeDetector
 import kotlinx.coroutines.Job
 import net.ankiweb.rsdroid.RustCleanup
 import timber.log.Timber
@@ -253,6 +252,9 @@ abstract class AbstractFlashcardViewer :
 
     /** Lock to allow thread-safe regeneration of mCard  */
     private val mCardLock: ReadWriteLock = ReentrantReadWriteLock()
+
+    /** whether controls are currently blocked, and how long we expect them to be  */
+    open var controlBlocked = ControlBlock.SLOW
 
     /** Preference: Whether the user wants press back twice to return to the main screen"  */
     private var mExitViaDoubleTapBack = false
@@ -630,7 +632,6 @@ abstract class AbstractFlashcardViewer :
     override fun onPause() {
         super.onPause()
         automaticAnswer.disable()
-        mGestureDetectorImpl.stopShakeDetector()
         mLongClickHandler.removeCallbacks(mStartLongClickAction)
         if (this::mSoundPlayer.isInitialized) {
             mSoundPlayer.stopSounds()
@@ -642,7 +643,6 @@ abstract class AbstractFlashcardViewer :
     override fun onResume() {
         super.onResume()
         automaticAnswer.enable()
-        mGestureDetectorImpl.startShakeDetector()
         // Reset the activity title
         updateActionBar()
         selectNavigationItem(-1)
@@ -862,7 +862,7 @@ abstract class AbstractFlashcardViewer :
         editCard.putExtra(NoteEditor.EXTRA_CALLER, NoteEditor.CALLER_REVIEWER_EDIT)
         editCard.putExtra(FINISH_ANIMATION_EXTRA, getInverseTransition(animation) as Parcelable)
         editorCard = currentCard
-        editCurrentCardLauncher.launch(editCard)
+        launchActivityForResultWithAnimation(editCard, editCurrentCardLauncher, animation)
     }
 
     fun generateQuestionSoundList() {
@@ -1668,6 +1668,7 @@ abstract class AbstractFlashcardViewer :
     }
 
     protected open fun unblockControls() {
+        controlBlocked = ControlBlock.UNBLOCKED
         mCardFrame!!.isEnabled = true
         flipCardLayout?.isEnabled = true
         easeButton1?.unblockBasedOnEase(mCurrentEase)
@@ -1679,6 +1680,30 @@ abstract class AbstractFlashcardViewer :
         }
         mTouchLayer?.visibility = View.VISIBLE
         mInAnswer = false
+        invalidateOptionsMenu()
+    }
+
+    /**
+     * @param quick Whether we expect the control to come back quickly
+     */
+    @VisibleForTesting
+    protected open fun blockControls(quick: Boolean) {
+        controlBlocked = if (quick) {
+            ControlBlock.QUICK
+        } else {
+            ControlBlock.SLOW
+        }
+        mCardFrame!!.isEnabled = false
+        flipCardLayout!!.isEnabled = false
+        mTouchLayer!!.visibility = View.INVISIBLE
+        mInAnswer = true
+        easeButton1!!.blockBasedOnEase(mCurrentEase)
+        easeButton2!!.blockBasedOnEase(mCurrentEase)
+        easeButton3!!.blockBasedOnEase(mCurrentEase)
+        easeButton4!!.blockBasedOnEase(mCurrentEase)
+        if (typeAnswer!!.validForEditText()) {
+            answerField!!.isEnabled = false
+        }
         invalidateOptionsMenu()
     }
 
@@ -1740,122 +1765,126 @@ abstract class AbstractFlashcardViewer :
     }
 
     override fun executeCommand(which: ViewerCommand, fromGesture: Gesture?): Boolean {
-        return when (which) {
-            ViewerCommand.SHOW_ANSWER -> {
-                if (displayAnswer) {
-                    return false
+        return if (isControlBlocked && which !== ViewerCommand.EXIT) {
+            false
+        } else {
+            when (which) {
+                ViewerCommand.SHOW_ANSWER -> {
+                    if (displayAnswer) {
+                        return false
+                    }
+                    displayCardAnswer()
+                    true
                 }
-                displayCardAnswer()
-                true
-            }
 
-            ViewerCommand.FLIP_OR_ANSWER_EASE1 -> {
-                flipOrAnswerCard(EASE_1)
-                true
-            }
+                ViewerCommand.FLIP_OR_ANSWER_EASE1 -> {
+                    flipOrAnswerCard(EASE_1)
+                    true
+                }
 
-            ViewerCommand.FLIP_OR_ANSWER_EASE2 -> {
-                flipOrAnswerCard(EASE_2)
-                true
-            }
+                ViewerCommand.FLIP_OR_ANSWER_EASE2 -> {
+                    flipOrAnswerCard(EASE_2)
+                    true
+                }
 
-            ViewerCommand.FLIP_OR_ANSWER_EASE3 -> {
-                flipOrAnswerCard(EASE_3)
-                true
-            }
+                ViewerCommand.FLIP_OR_ANSWER_EASE3 -> {
+                    flipOrAnswerCard(EASE_3)
+                    true
+                }
 
-            ViewerCommand.FLIP_OR_ANSWER_EASE4 -> {
-                flipOrAnswerCard(EASE_4)
-                true
-            }
+                ViewerCommand.FLIP_OR_ANSWER_EASE4 -> {
+                    flipOrAnswerCard(EASE_4)
+                    true
+                }
 
-            ViewerCommand.EXIT -> {
-                closeReviewer(RESULT_DEFAULT)
-                true
-            }
+                ViewerCommand.EXIT -> {
+                    closeReviewer(RESULT_DEFAULT)
+                    true
+                }
 
-            ViewerCommand.UNDO -> {
-                undo()
-                true
-            }
+                ViewerCommand.UNDO -> {
+                    undo()
+                    true
+                }
 
-            ViewerCommand.EDIT -> {
-                editCard(fromGesture)
-                true
-            }
+                ViewerCommand.EDIT -> {
+                    editCard(fromGesture)
+                    true
+                }
 
-            ViewerCommand.TAG -> {
-                showTagsDialog()
-                true
-            }
+                ViewerCommand.TAG -> {
+                    showTagsDialog()
+                    true
+                }
 
-            ViewerCommand.BURY_CARD -> buryCard()
-            ViewerCommand.BURY_NOTE -> buryNote()
-            ViewerCommand.SUSPEND_CARD -> suspendCard()
-            ViewerCommand.SUSPEND_NOTE -> suspendNote()
-            ViewerCommand.DELETE -> {
-                showDeleteNoteDialog()
-                true
-            }
+                ViewerCommand.BURY_CARD -> buryCard()
+                ViewerCommand.BURY_NOTE -> buryNote()
+                ViewerCommand.SUSPEND_CARD -> suspendCard()
+                ViewerCommand.SUSPEND_NOTE -> suspendNote()
+                ViewerCommand.DELETE -> {
+                    showDeleteNoteDialog()
+                    true
+                }
 
-            ViewerCommand.PLAY_MEDIA -> {
-                playSounds(true)
-                true
-            }
+                ViewerCommand.PLAY_MEDIA -> {
+                    playSounds(true)
+                    true
+                }
 
-            ViewerCommand.PAGE_UP -> {
-                onPageUp()
-                true
-            }
+                ViewerCommand.PAGE_UP -> {
+                    onPageUp()
+                    true
+                }
 
-            ViewerCommand.PAGE_DOWN -> {
-                onPageDown()
-                true
-            }
+                ViewerCommand.PAGE_DOWN -> {
+                    onPageDown()
+                    true
+                }
 
-            ViewerCommand.ABORT_AND_SYNC -> {
-                abortAndSync()
-                true
-            }
+                ViewerCommand.ABORT_AND_SYNC -> {
+                    abortAndSync()
+                    true
+                }
 
-            ViewerCommand.RECORD_VOICE -> {
-                recordVoice()
-                true
-            }
+                ViewerCommand.RECORD_VOICE -> {
+                    recordVoice()
+                    true
+                }
 
-            ViewerCommand.REPLAY_VOICE -> {
-                replayVoice()
-                true
-            }
+                ViewerCommand.REPLAY_VOICE -> {
+                    replayVoice()
+                    true
+                }
 
-            ViewerCommand.TOGGLE_WHITEBOARD -> {
-                toggleWhiteboard()
-                true
-            }
+                ViewerCommand.TOGGLE_WHITEBOARD -> {
+                    toggleWhiteboard()
+                    true
+                }
 
-            ViewerCommand.CLEAR_WHITEBOARD -> {
-                clearWhiteboard()
-                true
-            }
+                ViewerCommand.CLEAR_WHITEBOARD -> {
+                    clearWhiteboard()
+                    true
+                }
 
-            ViewerCommand.CHANGE_WHITEBOARD_PEN_COLOR -> {
-                changeWhiteboardPenColor()
-                true
-            }
+                ViewerCommand.CHANGE_WHITEBOARD_PEN_COLOR -> {
+                    changeWhiteboardPenColor()
+                    true
+                }
 
-            ViewerCommand.SHOW_HINT -> {
-                loadUrlInViewer("javascript: showHint();")
-                true
-            }
+                ViewerCommand.SHOW_HINT -> {
+                    loadUrlInViewer("javascript: showHint();")
+                    true
+                }
 
-            ViewerCommand.SHOW_ALL_HINTS -> {
-                loadUrlInViewer("javascript: showAllHints();")
-                true
-            }
+                ViewerCommand.SHOW_ALL_HINTS -> {
+                    loadUrlInViewer("javascript: showAllHints();")
+                    true
+                }
 
-            else -> {
-                Timber.w("Unknown command requested: %s", which)
-                false
+                else -> {
+                    Timber.w("Unknown command requested: %s", which)
+                    false
+                }
             }
         }
     }
@@ -1946,7 +1975,7 @@ abstract class AbstractFlashcardViewer :
         mPreviousAnswerIndicator!!.stopAutomaticHide()
         mLongClickHandler.removeCallbacks(mStartLongClickAction)
         this@AbstractFlashcardViewer.setResult(result)
-        finish()
+        finishWithAnimation(ActivityTransitionAnimation.Direction.END)
     }
 
     protected fun refreshActionBar() {
@@ -2147,14 +2176,6 @@ abstract class AbstractFlashcardViewer :
         open fun eventCanBeSentToWebView(event: MotionEvent): Boolean {
             return true
         }
-
-        open fun startShakeDetector() {
-            // intentionally blank
-        }
-
-        open fun stopShakeDetector() {
-            // intentionally blank
-        }
     }
 
     protected open fun onSingleTap(): Boolean {
@@ -2165,46 +2186,12 @@ abstract class AbstractFlashcardViewer :
 
     /** #6141 - blocks clicking links from executing "touch" gestures.
      * COULD_BE_BETTER: Make base class static and move this out of the CardViewer  */
-    internal inner class LinkDetectingGestureDetector() :
-        MyGestureDetector(), ShakeDetector.Listener {
-        private var shakeDetector: ShakeDetector? = null
-
-        init {
-            initShakeDetector()
-        }
-
-        private fun initShakeDetector() {
-            Timber.d("Initializing shake detector")
-            if (mGestureProcessor.isBound(Gesture.SHAKE)) {
-                val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-                shakeDetector = ShakeDetector(this).apply {
-                    start(sensorManager, SensorManager.SENSOR_DELAY_UI)
-                }
-            }
-        }
-
-        override fun stopShakeDetector() {
-            shakeDetector?.stop()
-            shakeDetector = null
-        }
-
-        override fun startShakeDetector() {
-            if (shakeDetector == null) {
-                initShakeDetector()
-            }
-        }
-
+    internal inner class LinkDetectingGestureDetector : MyGestureDetector() {
         /** A list of events to process when listening to WebView touches   */
         private val mDesiredTouchEvents = hashSetInit<MotionEvent>(2)
 
         /** A list of events we sent to the WebView (to block double-processing)  */
         private val mDispatchedTouchEvents = hashSetInit<MotionEvent>(2)
-
-        override fun hearShake() {
-            Timber.d("Shake detected!")
-            mGestureProcessor.onShake()
-        }
-
         override fun onFillFlashcard() {
             Timber.d("Removing pending touch events for gestures")
             mDesiredTouchEvents.clear()
@@ -2621,7 +2608,7 @@ abstract class AbstractFlashcardViewer :
                 Timber.d("Opening resolved external link \"%s\" with an Intent: %s", url, intent)
             }
             try {
-                startActivity(intent)
+                startActivityWithoutAnimation(intent)
             } catch (e: ActivityNotFoundException) {
                 Timber.w(e) // Don't crash if the intent is not handled
             }
@@ -2710,6 +2697,9 @@ abstract class AbstractFlashcardViewer :
 
     val isDisplayingAnswer
         get() = displayAnswer
+
+    open val isControlBlocked: Boolean
+        get() = controlBlocked !== ControlBlock.UNBLOCKED
 
     internal fun showTagsDialog() {
         val tags = ArrayList(getColUnsafe.tags.all())

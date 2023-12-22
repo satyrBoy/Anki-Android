@@ -39,7 +39,7 @@ import kotlinx.coroutines.runBlocking
 import timber.log.Timber
 import java.io.ByteArrayInputStream
 
-const val PORT = 0
+private const val PORT = 0
 // const val PORT = 40001
 
 // local debugging:

@@ -202,9 +202,6 @@ object LanguageUtil {
         return DateFormat.getDateInstance(DateFormat.SHORT, Locale.getDefault()).format(Date(s * 1000L))
     }
 
-    fun getShortDateFormatFromS(s: Int): String =
-        DateFormat.getDateInstance(DateFormat.SHORT, Locale.getDefault()).format(Date(s * 1000L))
-
     fun getLocaleCompat(resources: Resources): Locale? {
         return ConfigurationCompat.getLocales(resources.configuration)[0]
     }

@@ -42,6 +42,4 @@ fun String.lastIndexOfOrNull(c: Char): Int? =
         else -> index
     }
 
-fun emptyStringMutableList(size: Int): MutableList<String> = MutableList(size) { "" }
-
 fun emptyStringArray(size: Int): Array<String> = Array(size) { "" }

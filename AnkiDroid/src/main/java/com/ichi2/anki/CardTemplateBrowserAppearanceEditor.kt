@@ -48,7 +48,7 @@ class CardTemplateBrowserAppearanceEditor : AnkiActivity() {
         val bundle = savedInstanceState ?: intent.extras
         if (bundle == null) {
             UIUtils.showThemedToast(this, getString(R.string.card_template_editor_card_browser_appearance_failed), true)
-            finish()
+            finishActivityWithFade(this)
             return
         }
         initializeUiFromBundle(bundle)
@@ -157,7 +157,7 @@ class CardTemplateBrowserAppearanceEditor : AnkiActivity() {
     private fun discardChangesAndClose() {
         Timber.i("Closing and discarding changes")
         setResult(RESULT_CANCELED)
-        finish()
+        finishActivityWithFade(this)
     }
 
     private fun saveAndExit() {
@@ -167,7 +167,7 @@ class CardTemplateBrowserAppearanceEditor : AnkiActivity() {
             putExtra(INTENT_ANSWER_FORMAT, answerFormat)
         }
         setResult(RESULT_OK, data)
-        finish()
+        finishActivityWithFade(this)
     }
 
     private fun hasChanges(): Boolean {

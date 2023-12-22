@@ -62,7 +62,8 @@ class DeckSpinnerSelection(
 
     private val mFragmentManagerSupplier: FragmentManagerSupplier = context.asFragmentManagerSupplier()
 
-    private lateinit var dropDownDecks: List<DeckNameId>
+    lateinit var dropDownDecks: List<DeckNameId>
+        private set
     private var mDeckDropDownAdapter: DeckDropDownAdapter? = null
 
     fun initializeActionBarDeckSpinner(actionBar: ActionBar) {
@@ -115,7 +116,7 @@ class DeckSpinnerSelection(
         return collection.decks.allNamesAndIds(includeFiltered = includeFiltered)
     }
 
-    private fun setSpinnerListener() {
+    fun setSpinnerListener() {
         spinner.setOnTouchListener { _: View?, motionEvent: MotionEvent ->
             if (motionEvent.action == MotionEvent.ACTION_UP) {
                 displayDeckSelectionDialog(collection)

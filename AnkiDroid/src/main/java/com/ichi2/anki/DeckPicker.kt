@@ -88,8 +88,6 @@ import com.ichi2.anki.dialogs.customstudy.CustomStudyDialog.CustomStudyListener
 import com.ichi2.anki.dialogs.customstudy.CustomStudyDialogFactory
 import com.ichi2.anki.export.ActivityExportingDelegate
 import com.ichi2.anki.export.ExportType
-import com.ichi2.anki.introduction.CollectionPermissionScreenLauncher
-import com.ichi2.anki.introduction.hasCollectionStoragePermissions
 import com.ichi2.anki.notetype.ManageNotetypes
 import com.ichi2.anki.pages.AnkiPackageImporterFragment
 import com.ichi2.anki.pages.CongratsPage
@@ -106,6 +104,7 @@ import com.ichi2.anki.snackbar.BaseSnackbarBuilderProvider
 import com.ichi2.anki.snackbar.SnackbarBuilder
 import com.ichi2.anki.snackbar.showSnackbar
 import com.ichi2.anki.ui.dialogs.storageMigrationFailedDialogIsShownOrPending
+import com.ichi2.anki.ui.windows.permissions.PermissionsActivity
 import com.ichi2.anki.utils.SECONDS_PER_DAY
 import com.ichi2.anki.widgets.DeckAdapter
 import com.ichi2.annotations.NeedsTest
@@ -119,6 +118,7 @@ import com.ichi2.libanki.utils.TimeManager
 import com.ichi2.ui.BadgeDrawableBuilder
 import com.ichi2.utils.*
 import com.ichi2.utils.NetworkUtils.isActiveNetworkMetered
+import com.ichi2.utils.Permissions.hasStorageAccessPermission
 import com.ichi2.widget.WidgetStatus
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.filterNotNull
@@ -179,8 +179,7 @@ open class DeckPicker :
     ImportColpkgListener,
     BaseSnackbarBuilderProvider,
     ApkgImportResultLauncherProvider,
-    CsvImportResultLauncherProvider,
-    CollectionPermissionScreenLauncher {
+    CsvImportResultLauncherProvider {
     // Short animation duration from system
     private var mShortAnimDuration = 0
     private var mBackButtonPressedToExit = false
@@ -249,7 +248,9 @@ open class DeckPicker :
     private lateinit var mCustomStudyDialogFactory: CustomStudyDialogFactory
     private lateinit var mContextMenuFactory: DeckPickerContextMenu.Factory
 
-    override val permissionScreenLauncher = recreateActivityResultLauncher()
+    private val permissionScreenLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        ActivityCompat.recreate(this)
+    }
 
     private val reviewLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -371,17 +372,13 @@ open class DeckPicker :
 
         // handle the first load: display the app introduction
         if (!hasShownAppIntro()) {
-            Timber.i("Displaying app intro")
             val appIntro = Intent(this, IntroductionActivity::class.java)
             appIntro.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(appIntro)
+            startActivityWithoutAnimation(appIntro)
             finish() // calls onDestroy() immediately
             return
-        } else {
-            Timber.d("Not displaying app intro")
         }
         if (intent.hasExtra(INTENT_SYNC_FROM_LOGIN)) {
-            Timber.d("launched from introduction activity login: syncing")
             mSyncOnResume = true
         }
 
@@ -434,7 +431,6 @@ open class DeckPicker :
             Timber.w(e, "Failed to apply background")
             showThemedToast(this, getString(R.string.failed_to_apply_background_image, e.localizedMessage), false)
         }
-        mExportingDelegate.onRestoreInstanceState(savedInstanceState)
 
         // create and set an adapter for the RecyclerView
         mDeckListAdapter = DeckAdapter(layoutInflater, this).apply {
@@ -473,7 +469,20 @@ open class DeckPicker :
     }
 
     private fun hasShownAppIntro(): Boolean {
-        return this.sharedPrefs().getBoolean(IntroductionActivity.INTRODUCTION_SLIDES_SHOWN, false)
+        val prefs = this.sharedPrefs()
+
+        // if moving from 2.15 to 2.16 then we do not want to show the intro
+        // remove this after ~2.17 and default to 'false' if the pref is not set
+        if (!prefs.contains(IntroductionActivity.INTRODUCTION_SLIDES_SHOWN)) {
+            return if (!InitialActivity.wasFreshInstall(prefs)) {
+                prefs.edit { putBoolean(IntroductionActivity.INTRODUCTION_SLIDES_SHOWN, true) }
+                true
+            } else {
+                false
+            }
+        }
+
+        return prefs.getBoolean(IntroductionActivity.INTRODUCTION_SLIDES_SHOWN, false)
     }
 
     /**
@@ -552,7 +561,10 @@ open class DeckPicker :
      *   that may have been dismissed. Make this run only once?
      */
     private fun handleStartup() {
-        if (collectionPermissionScreenWasOpened()) {
+        val ankiDroidFolder = selectAnkiDroidFolder(this)
+        if (!ankiDroidFolder.hasRequiredPermissions(this)) {
+            Timber.i("postponing startup code - dialog shown")
+            permissionScreenLauncher.launch(PermissionsActivity.getIntent(this, ankiDroidFolder.permissionSet))
             return
         }
 
@@ -585,7 +597,7 @@ open class DeckPicker :
                     showDatabaseErrorDialog(DatabaseErrorDialogType.DIALOG_STORAGE_UNAVAILABLE_AFTER_UNINSTALL)
                 } else {
                     val i = AdvancedSettingsFragment.getSubscreenIntent(this)
-                    requestPathUpdateLauncher.launch(i)
+                    launchActivityForResultWithAnimation(i, requestPathUpdateLauncher, NONE)
                     showThemedToast(this, R.string.directory_inaccessible, false)
                 }
             }
@@ -939,7 +951,7 @@ open class DeckPicker :
                 val manageNoteTypesTarget =
                     ManageNotetypes::class.java
                 val noteTypeBrowser = Intent(this, manageNoteTypesTarget)
-                startActivity(noteTypeBrowser)
+                startActivityWithAnimation(noteTypeBrowser, START)
                 return true
             }
             R.id.action_restore_backup -> {
@@ -1003,7 +1015,7 @@ open class DeckPicker :
 
     fun refreshState() {
         // Due to the App Introduction, this may be called before permission has been granted.
-        if (mSyncOnResume && hasCollectionStoragePermissions()) {
+        if (mSyncOnResume && hasStorageAccessPermission(this)) {
             Timber.i("Performing Sync on Resume")
             sync()
             mSyncOnResume = false
@@ -1025,7 +1037,6 @@ open class DeckPicker :
                 savedInstanceState.getString("dbRestorationPath", it.newAnkiDroidDirectory)
             }
         }
-        mExportingDelegate.onSaveInstanceState(savedInstanceState)
         savedInstanceState.putSerializable("mediaUsnOnConflict", mediaUsnOnConflict)
     }
 
@@ -1100,7 +1111,7 @@ open class DeckPicker :
                     ) || mBackButtonPressedToExit
                 ) {
                     automaticSync()
-                    finish()
+                    finishWithAnimation()
                 } else {
                     showSnackbar(R.string.back_pressed_once, Snackbar.LENGTH_SHORT)
                 }
@@ -1110,6 +1121,10 @@ open class DeckPicker :
                 }
             }
         }
+    }
+
+    private fun finishWithAnimation() {
+        super.finishWithAnimation(DEFAULT)
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
@@ -1202,7 +1217,7 @@ open class DeckPicker :
     fun addNote() {
         val intent = Intent(this@DeckPicker, NoteEditor::class.java)
         intent.putExtra(NoteEditor.EXTRA_CALLER, NoteEditor.CALLER_DECKPICKER)
-        startActivity(intent)
+        startActivityWithAnimation(intent, START)
     }
 
     private fun showStartupScreensAndDialogs(preferences: SharedPreferences, skip: Int) {
@@ -1330,7 +1345,8 @@ open class DeckPicker :
                 Timber.i("Displaying new features")
                 val infoIntent = Intent(this, Info::class.java)
                 infoIntent.putExtra(Info.TYPE_EXTRA, Info.TYPE_NEW_VERSION)
-                showNewVersionInfoLauncher.launch(infoIntent)
+                val transition = if (skip != 0) START else NONE
+                launchActivityForResultWithAnimation(infoIntent, showNewVersionInfoLauncher, transition)
             } else {
                 Timber.i("Dev Build - not showing 'new features'")
                 // Don't show new features dialog for development builds
@@ -1598,7 +1614,7 @@ open class DeckPicker :
     override fun loginToSyncServer() {
         val myAccount = Intent(this, MyAccount::class.java)
         myAccount.putExtra("notLoggedIn", true)
-        loginForSyncLauncher.launch(myAccount)
+        launchActivityForResultWithAnimation(myAccount, loginForSyncLauncher, FADE)
     }
 
     // Callback to import a file -- adding it to existing collection
@@ -1659,13 +1675,13 @@ open class DeckPicker :
 
     fun openAnkiWebSharedDecks() {
         val intent = Intent(this, SharedDecksActivity::class.java)
-        startActivity(intent)
+        startActivityWithoutAnimation(intent)
     }
 
     private fun openFilteredDeckOptions() {
         val intent = Intent()
         intent.setClass(this, FilteredDeckOptions::class.java)
-        startActivity(intent)
+        startActivityWithAnimation(intent, START)
     }
 
     private fun openStudyOptions(@Suppress("SameParameterValue") withDeckOptions: Boolean) {
@@ -1676,7 +1692,7 @@ open class DeckPicker :
             val intent = Intent()
             intent.putExtra("withDeckOptions", withDeckOptions)
             intent.setClass(this, StudyOptionsActivity::class.java)
-            reviewLauncher.launch(intent)
+            launchActivityForResultWithAnimation(intent, reviewLauncher, START)
         }
     }
 
@@ -1919,11 +1935,11 @@ open class DeckPicker :
             // open cram options if filtered deck
             val i = Intent(this@DeckPicker, FilteredDeckOptions::class.java)
             i.putExtra("did", did)
-            startActivity(i)
+            startActivityWithAnimation(i, FADE)
         } else {
             // otherwise open regular options
             val intent = com.ichi2.anki.pages.DeckOptions.getIntent(this, did)
-            startActivity(intent)
+            startActivityWithAnimation(intent, FADE)
         }
     }
 
@@ -2053,7 +2069,7 @@ open class DeckPicker :
 
     private fun openReviewer() {
         val reviewer = Intent(this, Reviewer::class.java)
-        reviewLauncher.launch(reviewer)
+        launchActivityForResultWithAnimation(reviewer, reviewLauncher, START)
     }
 
     override fun onCreateCustomStudySession() {

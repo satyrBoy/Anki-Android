@@ -18,8 +18,6 @@ package com.ichi2.anki
 
 import anki.frontend.SetSchedulingStatesRequest
 import com.ichi2.anki.pages.AnkiServer
-import com.ichi2.anki.pages.RangeHeader
-import com.ichi2.anki.pages.toInputStream
 import com.ichi2.utils.AssetHelper
 import timber.log.Timber
 import java.io.File
@@ -60,24 +58,10 @@ class ReviewerServer(activity: AbstractFlashcardViewer, private val mediaDir: St
             // fall back to looking in media folder
             val file = File(mediaDir, uri.substring(1))
             if (file.exists()) {
-                val rangeHeader = RangeHeader.from(session, defaultEnd = file.length() - 1)
+                val inputStream = FileInputStream(file)
                 val mimeType = AssetHelper.guessMimeType(uri)
-                return if (rangeHeader != null) {
-                    val (start, end) = rangeHeader
-                    newFixedLengthResponse(
-                        Response.Status.PARTIAL_CONTENT,
-                        mimeType,
-                        file.toInputStream(rangeHeader),
-                        rangeHeader.contentLength
-                    ).apply {
-                        addHeader("Content-Range", "bytes $start-$end/${file.length()}")
-                        addHeader("Accept-Ranges", "bytes")
-                    }
-                } else {
-                    val inputStream = FileInputStream(file)
-                    Timber.v("OK: $uri")
-                    newChunkedResponse(Response.Status.OK, mimeType, inputStream)
-                }
+                Timber.v("OK: $uri")
+                return newChunkedResponse(Response.Status.OK, mimeType, inputStream)
                 // probably don't need this anymore
                 // resp.addHeader("Access-Control-Allow-Origin", "*")
             }

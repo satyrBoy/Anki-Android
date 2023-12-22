@@ -20,9 +20,11 @@ import android.view.Menu
 import androidx.core.content.edit
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.ichi2.anki.AbstractFlashcardViewer.Companion.RESULT_DEFAULT
 import com.ichi2.anki.AnkiDroidJsAPITest.Companion.formatApiResult
 import com.ichi2.anki.AnkiDroidJsAPITest.Companion.getDataFromRequest
 import com.ichi2.anki.AnkiDroidJsAPITest.Companion.jsApiContract
+import com.ichi2.anki.cardviewer.ViewerCommand
 import com.ichi2.anki.cardviewer.ViewerCommand.FLIP_OR_ANSWER_EASE1
 import com.ichi2.anki.cardviewer.ViewerCommand.MARK
 import com.ichi2.anki.preferences.PreferenceTestUtils
@@ -67,6 +69,21 @@ class ReviewerTest : RobolectricTest() {
                     reviewer.getColUnsafe
                 )
             }
+        }
+    }
+
+    @Ignore("flaky")
+    @Test
+    @RunInBackground
+    @Flaky(os = OS.WINDOWS, "startUp: BackendCollectionAlreadyOpenException")
+    fun exitCommandWorksAfterControlsAreBlocked() {
+        ensureCollectionLoadIsSynchronous()
+        ActivityScenario.launchActivityForResult(Reviewer::class.java).use { scenario ->
+            scenario.onActivity { reviewer: Reviewer ->
+                reviewer.blockControls(true)
+                reviewer.executeCommand(ViewerCommand.EXIT)
+            }
+            assertThat(scenario.result.resultCode, equalTo(RESULT_DEFAULT))
         }
     }
 
@@ -414,8 +431,11 @@ class ReviewerTest : RobolectricTest() {
             return startReviewer(testClass, Reviewer::class.java)
         }
 
-        fun <T : Reviewer?> startReviewer(testClass: RobolectricTest, clazz: Class<T>): T =
-            startActivityNormallyOpenCollectionWithIntent(testClass, clazz, Intent())
+        fun <T : Reviewer?> startReviewer(testClass: RobolectricTest, clazz: Class<T>): T {
+            val reviewer = startActivityNormallyOpenCollectionWithIntent(testClass, clazz, Intent())
+            waitForAsyncTasksToComplete()
+            return reviewer
+        }
     }
 }
 
